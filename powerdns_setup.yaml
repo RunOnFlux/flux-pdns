@@ -1,0 +1,48 @@
+---
+- name: Install and configure PowerDNS
+  hosts: "{{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}"
+  become: yes
+
+  tasks:
+    - name: Install required packages
+      ansible.builtin.package:
+        name:
+          - epel-release
+          - pdns
+          - pdns-backend-pipe
+          - python3
+        state: present
+
+    - name: Copy PowerDNS configuration file
+      ansible.builtin.copy:
+        src: pdns.conf
+        dest: /etc/pdns/pdns.conf
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copy scripts directory to remote server
+      ansible.builtin.synchronize:
+        src: scripts/
+        dest: /opt/pdns/scripts
+      delegate_to: localhost
+
+    - name: Set executable permissions for scripts in the directory
+      ansible.builtin.file:
+        path: "{{ item }}"
+        mode: '0755'
+      with_fileglob:
+        - /opt/pdns/scripts/*
+
+    - name: Set DEPLOY_ENV environment variable
+      ansible.builtin.lineinfile:
+        path: /etc/environment
+        regexp: '^DEPLOY_ENV='
+        line: "DEPLOY_ENV={{ DEPLOY_ENV }}"
+        state: present
+
+    - name: Restart PowerDNS service
+      ansible.builtin.systemd:
+        name: pdns
+        state: restarted
+        enabled: yes
