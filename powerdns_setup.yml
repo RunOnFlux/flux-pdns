@@ -7,7 +7,7 @@
     - name: Install required packages
       ansible.builtin.package:
         name:
-          - pdns
+          - pdns-server
           - pdns-backend-pipe
           - python3
           - logrotate
