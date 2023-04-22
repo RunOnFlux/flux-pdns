@@ -3,7 +3,7 @@ name: Deploy PowerDNS configuration
 on:
   push:
     branches:
-      - main
+      - master
   release:
     types:
       - created
