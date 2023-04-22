@@ -11,7 +11,7 @@
 
     - name: Add PowerDNS repository
       ansible.builtin.apt_repository:
-        repo: "deb [arch=amd64] http://repo.powerdns.com/ubuntu focal-auth-master"
+        repo: "deb [arch=amd64] http://repo.powerdns.com/ubuntu focal-auth-master main"
         state: present
 
     - name: Update apt cache
