@@ -11,12 +11,33 @@
 
     - name: Add PowerDNS repository
       ansible.builtin.apt_repository:
-        repo: "deb [arch=amd64] http://repo.powerdns.com/ubuntu focal-auth-master main"
+        repo: "deb [arch=amd64] http://repo.powerdns.com/ubuntu {{ ansible_distribution_release }}-auth-{{ pdns_auth_version }} main"
         state: present
-
+      vars:
+        pdns_auth_version: "48"
+    
     - name: Update apt cache
       ansible.builtin.apt:
         update_cache: yes
+
+    - name: Delete content & directory
+      ansible.builtin.file:
+        state: absent
+        path: /etc/resolv.conf
+  
+    - name: Copy Resolve configuration file
+      ansible.builtin.copy:
+        src: resolv.conf
+        dest: /etc/resolv.conf
+        owner: root
+        group: root
+        mode: '0644'
+    
+    - name: Disable and stop systemd-resolved
+      ansible.builtin.systemd:
+        name: systemd-resolved
+        state: stopped
+        enabled: no
 
     - name: Install required packages
       ansible.builtin.package:
@@ -26,38 +47,30 @@
           - python3
           - logrotate
         state: present
-    
-    - name: Disable and stop systemd-resolved
-      ansible.builtin.systemd:
-        name: systemd-resolved
-        state: stopped
-        enabled: no
-
-    - name: Change NS resolv.conf settings
-      ansible.builtin.shell: |
-        sudo unlink /etc/resolv.conf;
-        echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf
 
     - name: Copy PowerDNS configuration file
       ansible.builtin.copy:
         src: pdns.conf
-        dest: /etc/pdns/pdns.conf
+        dest: /etc/powerdns/pdns.conf
         owner: root
         group: root
         mode: '0644'
 
-    - name: Copy scripts directory to remote server
-      ansible.builtin.synchronize:
-        src: scripts/
-        dest: /opt/pdns/scripts
-      delegate_to: localhost
-
-    - name: Set executable permissions for scripts in the directory
+    - name: Ensure /opt/pdns/scripts directory exists
       ansible.builtin.file:
-        path: "{{ item }}"
-        mode: '0755'
-      with_fileglob:
-        - /opt/pdns/scripts/*
+        path: /opt/pdns/scripts
+        state: directory
+        owner: root
+        group: root
+        mode: 0755
+
+    - name: Copy multiple files to remote server
+      ansible.builtin.copy:
+        src: scripts/pdns_pipe_backend.py
+        dest: /opt/pdns/scripts/pdns_pipe_backend.py
+        owner: root
+        group: root
+        mode: 0777
 
     - name: Copy PowerDNS logrotate configuration
       ansible.builtin.copy:

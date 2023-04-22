@@ -1,14 +1,80 @@
 #!/usr/bin/python3
 
 from sys import stdin, stdout
-from util import get_char_to_find
-from fdm_conf import APP2_CONF, APP_CONF
+import os
+import hashlib
+
+SPLIT_NAME = "NAME"
+SPLIT_HASH = "HASH"
+
+app2_list = [
+  {
+    "start": 'a',
+    "end": 'n',
+    "ips": [
+      "1.1.1.1"
+    ]
+  },
+  {
+    "start": 'o',
+    "end": 'z',
+    "ips": [
+      "2.2.2.2"
+    ]
+  },
+]
+
+APP2_CONF = {
+  "TYPE": SPLIT_NAME,
+  "SPLITS": {
+    char: ip 
+    for conf in app2_list
+    for char_code in range(ord(conf['start']), ord(conf['end'])+1)
+    for char, ip in zip(chr(char_code), conf['ips'])
+  },
+}
+
+app_list = [
+  {
+    "start": 'a',
+    "end": 'n',
+    "ips": [
+      "1.1.1.1"
+    ]
+  },
+  {
+    "start": 'o',
+    "end": 'z',
+    "ips": [
+      "2.2.2.2"
+    ]
+  },
+]
+
+APP_CONF = {
+  "TYPE": SPLIT_NAME,
+  "SPLITS": {
+    char: ip 
+    for conf in app_list
+    for char_code in range(ord(conf['start']), ord(conf['end'])+1)
+    for char, ip in zip(chr(char_code), conf['ips'])
+  },
+}
+
 data = stdin.readline()
 stdout.write("OK\tMy Backend\n")
 stdout.flush()
 
 deploy_env = os.environ.get('DEPLOY_ENV', 'staging')  # Default to 'staging' if not set
 config = APP_CONF if deploy_env == 'release' else APP2_CONF
+
+def get_char_to_find(name, split_type):
+  if split_type == SPLIT_NAME:
+    return name[0]
+  else:
+    hash_object = hashlib.sha256(name)
+    hex_dig = hash_object.hexdigest()
+    return hex_dig[0]
 
 while True:
     data = stdin.readline().strip()
