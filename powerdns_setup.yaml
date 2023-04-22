@@ -11,6 +11,7 @@
           - pdns
           - pdns-backend-pipe
           - python3
+          - logrotate
         state: present
 
     - name: Copy PowerDNS configuration file
@@ -34,6 +35,14 @@
       with_fileglob:
         - /opt/pdns/scripts/*
 
+    - name: Copy PowerDNS logrotate configuration
+      ansible.builtin.copy:
+        src: pdns_logrotate.conf
+        dest: /etc/logrotate.d/pdns
+        owner: root
+        group: root
+        mode: '0644'
+
     - name: Set DEPLOY_ENV environment variable
       ansible.builtin.lineinfile:
         path: /etc/environment
@@ -46,3 +55,12 @@
         name: pdns
         state: restarted
         enabled: yes
+
+    - name: Ensure logrotate runs daily
+      ansible.builtin.cron:
+        name: "logrotate"
+        user: "root"
+        job: "/usr/sbin/logrotate /etc/logrotate.conf"
+        day: "*"
+        hour: "0"
+        minute: "0"
