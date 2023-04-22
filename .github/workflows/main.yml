@@ -27,6 +27,7 @@ jobs:
       env:
         SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       run: |
+        mkdir -p ~/.ssh
         echo "$SSH_PRIVATE_KEY" > private_key
         chmod 600 private_key
         echo "Host *" >> ~/.ssh/config
