@@ -4,6 +4,22 @@
   become: yes
 
   tasks:
+    - name: Add PowerDNS repository key
+      ansible.builtin.apt_key:
+        url: "https://repo.powerdns.com/FD380FBB-pub.asc"
+        state: present
+
+    - name: Add PowerDNS repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64] http://repo.powerdns.com/ubuntu {{ ansible_distribution_release }}-auth-{{ pdns_auth_version }}"
+        state: present
+      vars:
+        pdns_auth_version: "44"
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+
     - name: Install required packages
       ansible.builtin.package:
         name:
@@ -12,6 +28,17 @@
           - python3
           - logrotate
         state: present
+    
+    - name: Disable and stop systemd-resolved
+      ansible.builtin.systemd:
+        name: systemd-resolved
+        state: stopped
+        enabled: no
+
+    - name: Change NS resolv.conf settings
+      ansible.builtin.shell: |
+        sudo unlink /etc/resolv.conf;
+        echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf
 
     - name: Copy PowerDNS configuration file
       ansible.builtin.copy:
