@@ -39,4 +39,4 @@ jobs:
       env:
         DEPLOY_ENV: ${{ github.event_name == 'release' && 'production' || 'staging' }}
       run: |
-        ansible-playbook -i hosts.ini powerdns_setup.yml
+        ansible-playbook -i hosts.ini -e "DEPLOY_ENV=$DEPLOY_ENV" powerdns_setup.yml
