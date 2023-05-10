@@ -49,6 +49,16 @@
         state: present
 
     - name: Copy PowerDNS configuration file
+      ansible.builtin.template:
+        src: pdns.conf.j2
+        dest: /etc/powerdns/pdns.conf
+        owner: root
+        group: root
+        mode: '0644'
+      vars:
+        subdomain: {{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}
+
+    - name: Copy PowerDNS configuration file
       ansible.builtin.copy:
         src: pdns.conf
         dest: /etc/powerdns/pdns.conf
