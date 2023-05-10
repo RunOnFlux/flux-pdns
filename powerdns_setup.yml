@@ -56,7 +56,7 @@
         group: root
         mode: '0644'
       vars:
-        subdomain: {{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}
+        subdomain: "{{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}"
 
     - name: Copy PowerDNS configuration file
       ansible.builtin.copy:
