@@ -12,14 +12,14 @@ app2_list = [
     "start": 'a',
     "end": 'n',
     "ips": [
-      "1.1.1.1"
+      "fdm-lb-2-1.runonflux.io"
     ]
   },
   {
     "start": 'o',
     "end": 'z',
     "ips": [
-      "2.2.2.2"
+      "fdm-lb-2-2.runonflux.io"
     ]
   },
 ]
