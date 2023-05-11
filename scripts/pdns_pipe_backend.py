@@ -87,7 +87,7 @@ while True:
         if char_to_search not in config["SPLITS"]:
             stdout.write("NXDOMAIN\n")
         else:
-            stdout.write("DATA\t" + qname + "\t" + qclass + "\tA\t3600\t" + id + f'\t{config["SPLITS"][char_to_search]}\n')
+            stdout.write("DATA\t" + qname + "\t" + qclass + "\tCNAME\t3600\t" + id + f'\t{config["SPLITS"][char_to_search]}\n')
         
     stdout.write("LOG\t" + data + "\n")
     stdout.write("END\n")
