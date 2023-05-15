@@ -6,8 +6,5 @@ if ! [ -x "$(command -v pm2)" ]; then
   npm install pm2@latest -g
 fi
 
-# Navigate to your project directory (replace with your actual directory)
-cd /path/to/your/project
-
 # Start your application with pm2
 pm2 start npm --name "healthchecker" -- start

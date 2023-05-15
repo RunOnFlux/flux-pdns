@@ -58,6 +58,12 @@
         state: latest
         update_cache: yes
     
+    - name: Create the destination directory
+      file:
+        path: /opt/healthchecker/src
+        state: directory
+      become: yes
+
     - name: Sync application files
       synchronize:
         src: src/
