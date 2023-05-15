@@ -46,7 +46,34 @@
           - pdns-backend-pipe
           - python3
           - logrotate
+          - nginx
         state: present
+  
+    - name: Install Node.js 18.x repository
+      shell: "curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -"
+
+    - name: Install Node.js
+      apt:
+        name: nodejs
+        state: latest
+        update_cache: yes
+    
+    - name: Sync application files
+      synchronize:
+        src: src/
+        dest: /opt/healthchecker/src
+        recursive: yes
+
+    - name: Make sure the start script is executable
+      file:
+        path: /opt/healthchecker/src/start.sh
+        mode: '0755'
+
+    - name: Start the application
+      command: /opt/healthchecker/src/start.sh
+      args:
+        chdir: /opt/healthchecker/src
+      
 
     - name: Copy PowerDNS configuration file
       ansible.builtin.template:
