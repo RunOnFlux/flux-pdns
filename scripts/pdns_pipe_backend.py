@@ -66,7 +66,7 @@ stdout.write("OK\tMy Backend\n")
 stdout.flush()
 
 deploy_env = os.environ.get('DEPLOY_ENV', 'staging')  # Default to 'staging' if not set
-config = APP_CONF if deploy_env == 'release' else APP2_CONF
+config = APP_CONF if deploy_env == 'production' else APP2_CONF
 
 def get_char_to_find(name, split_type):
   if split_type == SPLIT_NAME:
