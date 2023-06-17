@@ -7,55 +7,21 @@ import hashlib
 SPLIT_NAME = "NAME"
 SPLIT_HASH = "HASH"
 
-app2_list = [
+SPLIT_LIST = [
+{% for app in APP_LIST %}
   {
-    "start": 'a',
-    "end": 'n',
-    "ips": [
-      "fdm-lb-2-1.runonflux.io"
-    ]
+    "start": "{{ app.START }}",
+    "end": "{{ app.END }}",
+    "ips": {{ app.IPs }},
   },
-  {
-    "start": 'o',
-    "end": 'z',
-    "ips": [
-      "fdm-lb-2-2.runonflux.io"
-    ]
-  },
-]
-
-APP2_CONF = {
-  "TYPE": SPLIT_NAME,
-  "SPLITS": {
-    char: ip 
-    for conf in app2_list
-    for char_code in range(ord(conf['start']), ord(conf['end'])+1)
-    for char, ip in zip(chr(char_code), conf['ips'])
-  },
-}
-
-app_list = [
-  {
-    "start": 'a',
-    "end": 'n',
-    "ips": [
-      "1.1.1.1"
-    ]
-  },
-  {
-    "start": 'o',
-    "end": 'z',
-    "ips": [
-      "2.2.2.2"
-    ]
-  },
+{% endfor %}
 ]
 
 APP_CONF = {
   "TYPE": SPLIT_NAME,
   "SPLITS": {
     char: ip 
-    for conf in app_list
+    for conf in SPLIT_LIST
     for char_code in range(ord(conf['start']), ord(conf['end'])+1)
     for char, ip in zip(chr(char_code), conf['ips'])
   },
@@ -65,9 +31,7 @@ data = stdin.readline()
 stdout.write("OK\tMy Backend\n")
 stdout.flush()
 
-deploy_env = os.environ.get('DEPLOY_ENV')  # Default to 'staging' if not set
-config = APP_CONF if deploy_env == 'production' else APP2_CONF
-print(deploy_env)
+config = APP_CONF
 def get_char_to_find(name, split_type):
   if split_type == SPLIT_NAME:
     return name[0]

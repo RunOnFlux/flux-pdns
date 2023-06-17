@@ -99,9 +99,34 @@
         group: root
         mode: 0755
 
+    - name: Set variables for STAGING
+      set_fact:
+        APP_LIST:
+          - START: "a"
+            END: "n"
+            IPs: ["fdm-lb-2-1.runonflux.io"]
+          - START: "o"
+            END: "z"
+            IPs: ["fdm-lb-2-2.runonflux.io"]
+      when: DEPLOY_ENV == 'staging'
+
+    - name: Set variables for PRODUCTION
+      set_fact:
+        APP_LIST:
+          - START: "a"
+            END: "i"
+            IPs: ["1.1.1.1"]
+          - START: "j"
+            END: "r"
+            IPs: ["2.2.2.2"]
+          - START: "s"
+            END: "z"
+            IPs: ["3.3.3.3"]
+      when: DEPLOY_ENV != 'staging'
+
     - name: Copy multiple files to remote server
-      ansible.builtin.copy:
-        src: scripts/pdns_pipe_backend.py
+      ansible.builtin.template:
+        src: scripts/pdns_pipe_backend.py.j2
         dest: /opt/pdns/scripts/pdns_pipe_backend.py
         owner: root
         group: root
