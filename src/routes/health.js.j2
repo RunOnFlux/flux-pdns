@@ -5,7 +5,7 @@ const { Resolver } = require('node:dns');
 const resolver = new Resolver();
 
 router.get('/', async (req, res) => {
-  resolver.setServers(['15.235.208.172']);
+  resolver.setServers(['127.0.0.1']);
 
   resolver.resolveCname(`web.{{ subdomain }}.runonflux.io`, (err, addresses) => {
     if (err) {
