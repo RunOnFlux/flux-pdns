@@ -69,6 +69,16 @@
         src: src/
         dest: /opt/healthchecker/src
         recursive: yes
+    
+    - name: Template the health route
+      ansible.builtin.template:
+        src: src/routes/health.js.j2
+        dest: /opt/healthchecker/src/routes/health.js
+        owner: root
+        group: root
+        mode: 0777
+      vars:
+        subdomain: "{{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}"
 
     - name: Make sure the start script is executable
       file:
@@ -103,11 +113,8 @@
       set_fact:
         APP_LIST:
           - START: "a"
-            END: "n"
-            IPs: ["fdm-lb-2-1.runonflux.io"]
-          - START: "o"
             END: "z"
-            IPs: ["fdm-lb-2-2.runonflux.io"]
+            IPs: ["fdm-lb-2-1.runonflux.io"]
       when: DEPLOY_ENV == 'staging'
 
     - name: Set variables for PRODUCTION
@@ -115,13 +122,13 @@
         APP_LIST:
           - START: "a"
             END: "i"
-            IPs: ["1.1.1.1"]
+            IPs: ["fdm-lb-1-1.runonflux.io"]
           - START: "j"
             END: "r"
-            IPs: ["2.2.2.2"]
+            IPs: ["fdm-lb-1-2.runonflux.io"]
           - START: "s"
             END: "z"
-            IPs: ["3.3.3.3"]
+            IPs: ["fdm-lb-1-3.runonflux.io"]
       when: DEPLOY_ENV != 'staging'
 
     - name: Copy multiple files to remote server
