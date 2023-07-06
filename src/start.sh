@@ -6,6 +6,8 @@ if ! [ -x "$(command -v pm2)" ]; then
   npm install pm2@latest -g
 fi
 
+npm i >> /dev/null
+
 is_running=$(pm2 list | grep healthchecker)
 
 if [ -z "$is_running" ]; then
@@ -13,5 +15,5 @@ if [ -z "$is_running" ]; then
     pm2 start npm --name "healthchecker" -- start
 else
     # if the application is running, restart it
-    pm2 restart healtchecker
+    pm2 restart healthchecker
 fi
