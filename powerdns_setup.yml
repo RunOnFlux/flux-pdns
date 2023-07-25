@@ -113,22 +113,28 @@
       set_fact:
         APP_LIST:
           - START: "a"
-            END: "z"
+            END: "m"
             IPs: ["fdm-lb-2-1.runonflux.io"]
+          - START: "n"
+            END: "z"
+            IPs: ["fdm-lb-2-2.runonflux.io"]
       when: DEPLOY_ENV == 'staging'
 
     - name: Set variables for PRODUCTION
       set_fact:
         APP_LIST:
           - START: "a"
-            END: "i"
+            END: "g"
             IPs: ["fdm-lb-1-1.runonflux.io"]
-          - START: "j"
-            END: "r"
+          - START: "h"
+            END: "n"
             IPs: ["fdm-lb-1-2.runonflux.io"]
-          - START: "s"
-            END: "z"
+          - START: "o"
+            END: "u"
             IPs: ["fdm-lb-1-3.runonflux.io"]
+          - START: "v"
+            END: "z"
+            IPs: ["fdm-lb-1-4.runonflux.io"]
       when: DEPLOY_ENV != 'staging'
 
     - name: Copy multiple files to remote server
