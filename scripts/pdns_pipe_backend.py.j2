@@ -53,7 +53,9 @@ class Response:
         if self.enable_logging:
             data.append(f"LOG\t{str(self.question)}")
 
-        as_str = "\n".join(str(x) for x in data) + "\n"
+        # some answers can be empty - for example *.app.runonflux.io
+        filtered = [str(x) for x in data if str(x)]
+        as_str = "\n".join(filtered) + "\n"
         return f"{as_str}{terminator}"
 
 
