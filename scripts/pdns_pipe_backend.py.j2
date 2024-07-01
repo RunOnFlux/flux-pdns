@@ -187,6 +187,7 @@ def main():
 
     if not handshake:
         stdout.write("FAIL\n")
+        stdout.flush()
         stdin.readline()
         return
 
@@ -194,6 +195,7 @@ def main():
 
     if abi_version not in ["1", "2", "3"]:
         stdout.write("FAIL\n")
+        stdout.flush()
         stdin.readline()
         return
 
