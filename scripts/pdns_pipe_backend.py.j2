@@ -47,6 +47,7 @@ class Response:
         Returns:
             str: The serialized string
         """
+
         data = self.answers[:]
         terminator = "END\n"
 
@@ -170,12 +171,12 @@ class AbiV1Question(Question): ...
 
 
 @dataclass
-class AbiV2Question(Question):
+class AbiV2Question(AbiV1Question):
     local_address: str
 
 
 @dataclass
-class AbiV3Question(Question):
+class AbiV3Question(AbiV2Question):
     edns_address: str
 
 
