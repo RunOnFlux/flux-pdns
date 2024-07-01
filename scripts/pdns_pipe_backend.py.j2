@@ -180,24 +180,24 @@ class AbiV3Question(AbiV2Question):
     edns_address: str
 
 
-def main():
+def fail() -> None:
+    stdout.write("FAIL\n")
+    stdout.flush()
+    stdin.readline()
+
+
+def main() -> None:
     helo_line = stdin.readline()
 
     handshake: re.Match = re.search("^HELO\\t(?P<version>[1-3])", helo_line)
 
     if not handshake:
-        stdout.write("FAIL\n")
-        stdout.flush()
-        stdin.readline()
-        return
+        return fail()
 
     abi_version = handshake.group("version")
 
     if abi_version not in ["1", "2", "3"]:
-        stdout.write("FAIL\n")
-        stdout.flush()
-        stdin.readline()
-        return
+        return fail()
 
     stdout.write("OK\tFlux DNS Backend\n")
     stdout.flush()
