@@ -39,13 +39,22 @@ class Response:
     enable_logging: bool = True
 
     def __str__(self) -> str:
+        """Serializes one or more answers into a response.
+
+        If there are no answers (NXDOMAIN) we sent an empty end,
+        which pdns interprets as NXDOMAIN
+
+        Returns:
+            str: The serialized string
+        """
         data = self.answers[:]
+        terminator = "END\n"
 
         if self.enable_logging:
             data.append(f"LOG\t{str(self.question)}")
 
-        as_str = "\n".join(str(x) for x in data)
-        return f"{as_str}\nEND\n"
+        as_str = "\n".join(str(x) for x in data) + "\n"
+        return f"{as_str}{terminator}"
 
 
 @dataclass
