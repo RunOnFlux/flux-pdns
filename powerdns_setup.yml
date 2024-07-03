@@ -15,7 +15,7 @@
         state: present
       vars:
         pdns_auth_version: "48"
-    
+
     - name: Update apt cache
       ansible.builtin.apt:
         update_cache: yes
@@ -24,7 +24,7 @@
       ansible.builtin.file:
         state: absent
         path: /etc/resolv.conf
-  
+
     - name: Copy Resolve configuration file
       ansible.builtin.copy:
         src: resolv.conf
@@ -32,7 +32,7 @@
         owner: root
         group: root
         mode: '0644'
-    
+
     - name: Disable and stop systemd-resolved
       ansible.builtin.systemd:
         name: systemd-resolved
@@ -48,7 +48,7 @@
           - logrotate
           - nginx
         state: present
-  
+
     - name: Install Node.js 18.x repository
       shell: "curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -"
 
@@ -57,7 +57,7 @@
         name: nodejs
         state: latest
         update_cache: yes
-    
+
     - name: Create the destination directory
       file:
         path: /opt/healthchecker/src
@@ -69,7 +69,7 @@
         src: src/
         dest: /opt/healthchecker/src
         recursive: yes
-    
+
     - name: Template the health route
       ansible.builtin.template:
         src: src/routes/health.js.j2
@@ -89,7 +89,7 @@
       command: /opt/healthchecker/src/start.sh
       args:
         chdir: /opt/healthchecker/src
-      
+
 
     - name: Copy PowerDNS configuration file
       ansible.builtin.template:
@@ -112,6 +112,9 @@
     - name: Set variables for STAGING
       set_fact:
         APP_LIST:
+          - START: "0"
+            END: "9"
+            IPs: ["fdm-lb-2-1.runonflux.io"]
           - START: "a"
             END: "m"
             IPs: ["fdm-lb-2-1.runonflux.io"]
@@ -123,6 +126,9 @@
     - name: Set variables for PRODUCTION
       set_fact:
         APP_LIST:
+          - START: "0"
+            END: "9"
+            IPs: ["fdm-lb-1-1.runonflux.io"]
           - START: "a"
             END: "g"
             IPs: ["fdm-lb-1-1.runonflux.io"]
