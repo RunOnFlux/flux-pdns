@@ -14,7 +14,7 @@
         repo: "deb [arch=amd64] http://repo.powerdns.com/ubuntu {{ ansible_distribution_release }}-auth-{{ pdns_auth_version }} main"
         state: present
       vars:
-        pdns_auth_version: "48"
+        pdns_auth_version: "49"
 
     - name: Update apt cache
       ansible.builtin.apt:
