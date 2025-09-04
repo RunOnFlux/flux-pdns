@@ -173,21 +173,31 @@
       vars:
         subdomain: "{{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}"
 
-    - name: Copy named.conf for bind backend
-      ansible.builtin.copy:
-        src: named.conf
+    - name: Template named.conf for bind backend
+      ansible.builtin.template:
+        src: named.conf.j2
         dest: /etc/powerdns/named.conf
         owner: root
         group: root
         mode: '0644'
 
-    - name: Copy zone file for geo-routing
+    - name: Copy zone file for geo-routing (production)
       ansible.builtin.copy:
         src: zones/cdn-geo.runonflux.io.zone
         dest: /etc/powerdns/zones/cdn-geo.runonflux.io.zone
         owner: root
         group: root
         mode: '0644'
+      when: DEPLOY_ENV == 'production'
+
+    - name: Copy zone file for geo-routing (staging)
+      ansible.builtin.copy:
+        src: zones/cdn-geodev.runonflux.io.zone
+        dest: /etc/powerdns/zones/cdn-geodev.runonflux.io.zone
+        owner: root
+        group: root
+        mode: '0644'
+      when: DEPLOY_ENV == 'staging'
 
     - name: Copy zone file for app routing (production)
       ansible.builtin.copy:

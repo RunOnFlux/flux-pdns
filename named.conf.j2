@@ -8,11 +8,19 @@ options {
     directory "/etc/powerdns/zones";
 };
 
-// Zone for geo-routing functionality 
+{% if DEPLOY_ENV == 'production' %}
+// Zone for geo-routing functionality (production)
 zone "cdn-geo.runonflux.io" {
     type master;
     file "/etc/powerdns/zones/cdn-geo.runonflux.io.zone";
 };
+{% else %}
+// Zone for geo-routing functionality (staging/dev)
+zone "cdn-geodev.runonflux.io" {
+    type master;
+    file "/etc/powerdns/zones/cdn-geodev.runonflux.io.zone";
+};
+{% endif %}
 
 // Zone for production app routing
 // Handles all *.app.runonflux.io subdomains with character-based load balancing
