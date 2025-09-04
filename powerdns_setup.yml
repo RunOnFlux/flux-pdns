@@ -250,7 +250,7 @@
 
     # Service management
     - name: Validate PowerDNS configuration
-      command: pdns_server --check-config --config-dir=/etc/powerdns --daemon=no --guardian=no --socket-dir=/tmp/pdns-check
+      command: pdns_server --config=check --config-dir=/etc/powerdns
       register: config_check
       failed_when: config_check.rc != 0
       changed_when: false
