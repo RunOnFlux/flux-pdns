@@ -1,8 +1,8 @@
 # PowerDNS Configuration with Geo-routing and Lua Records
 # This configuration enables both the pipe backend and Lua records for geo-routing
 
-# Primary backend - Bind backend for all zones
-launch=bind
+# Primary backend - Bind backend for all zones, plus GeoIP for Lua Records
+launch=bind,geoip
 
 # Bind backend configuration for all zones
 bind-config=/etc/powerdns/named.conf
@@ -12,8 +12,9 @@ bind-check-interval=60
 enable-lua-records=yes
 lua-health-checks-interval=2
 
-# GeoIP databases for Lua Records (accessed via pickclosest() function)
-# Database path: /usr/share/GeoIP/GeoLite2-City.mmdb
+# GeoIP configuration for Lua Records
+geoip-database-files=/usr/share/GeoIP/GeoLite2-City.mmdb
+geoip-database-mode=mmdb
 
 # EDNS Client Subnet for better geo-location accuracy
 edns-subnet-processing=yes

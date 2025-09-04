@@ -60,6 +60,7 @@
         name:
           - pdns-server
           - pdns-backend-bind
+          - pdns-backend-geoip
           - python3
           - logrotate
           - nginx
