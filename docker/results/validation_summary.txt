@@ -1,7 +1,0 @@
-PowerDNS Bind Backend Validation Summary
-=======================================
-Test run: Thu Sep  4 12:44:34 UTC 2025
-Total tests: 17
-Passed: 17
-Failed: 0
-SUCCESS: All tests passed

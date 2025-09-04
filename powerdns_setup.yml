@@ -206,6 +206,7 @@
         owner: root
         group: root
         mode: '0644'
+      when: DEPLOY_ENV == 'production'
 
     - name: Copy zone file for app routing (staging)
       ansible.builtin.copy:
@@ -214,6 +215,7 @@
         owner: root
         group: root
         mode: '0644'
+      when: DEPLOY_ENV == 'staging'
 
     # Scripts directory setup
     - name: Ensure /opt/pdns/scripts directory exists
