@@ -8,14 +8,26 @@
     maxmind_license_key: "YOUR_LICENSE_KEY"  # Replace with actual MaxMind license key
 
   tasks:
-    - name: Add PowerDNS repository key
-      ansible.builtin.apt_key:
+    - name: Create apt keyrings directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download PowerDNS repository key
+      ansible.builtin.get_url:
         url: "https://repo.powerdns.com/FD380FBB-pub.asc"
-        state: present
+        dest: /tmp/powerdns-key.asc
+        mode: '0644'
+
+    - name: Add PowerDNS repository key to keyring
+      ansible.builtin.shell:
+        cmd: gpg --dearmor < /tmp/powerdns-key.asc > /etc/apt/keyrings/powerdns.gpg
+        creates: /etc/apt/keyrings/powerdns.gpg
 
     - name: Add PowerDNS repository
       ansible.builtin.apt_repository:
-        repo: "deb [arch=amd64] http://repo.powerdns.com/ubuntu {{ ansible_distribution_release }}-auth-{{ pdns_auth_version }} main"
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/powerdns.gpg] http://repo.powerdns.com/ubuntu {{ ansible_distribution_release }}-auth-{{ pdns_auth_version }} main"
         state: present
       vars:
         pdns_auth_version: "49"
