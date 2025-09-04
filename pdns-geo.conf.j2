@@ -12,9 +12,8 @@ bind-check-interval=60
 enable-lua-records=yes
 lua-health-checks-interval=2
 
-# GeoIP configuration
-geoip-database-files=/usr/share/GeoIP/GeoLite2-City.mmdb
-geoip-database-mode=mmdb
+# GeoIP databases for Lua Records (accessed via pickclosest() function)
+# Database path: /usr/share/GeoIP/GeoLite2-City.mmdb
 
 # EDNS Client Subnet for better geo-location accuracy
 edns-subnet-processing=yes
