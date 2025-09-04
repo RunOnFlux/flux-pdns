@@ -94,8 +94,10 @@ local staging_mappings = {
 
 -- Determine environment from zone name or use environment variable
 function getEnvironment(qname)
+    -- Convert qname to string if it's userdata
+    local domain = tostring(qname)
     -- Check if this is app2.runonflux.io (staging) or app.runonflux.io (production)
-    if string.find(qname, "app2%.runonflux%.io") then
+    if string.find(domain, "app2%.runonflux%.io") then
         return "staging"
     else
         return "production"
