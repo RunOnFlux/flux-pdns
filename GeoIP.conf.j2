@@ -1,0 +1,24 @@
+# GeoIP.conf for geoipupdate
+# Configuration for downloading MaxMind GeoLite2 databases
+
+# MaxMind Account ID
+AccountID {{ maxmind_account_id }}
+
+# MaxMind License Key
+LicenseKey {{ maxmind_license_key }}
+
+# Database edition IDs to download
+EditionIDs GeoLite2-City GeoLite2-Country
+
+# Directory to store the downloaded databases
+DatabaseDirectory /usr/share/GeoIP
+
+# Optional: Preserve modification times (useful for caching)
+PreserveFileTimes 1
+
+# Optional: Host to download from (default is updates.maxmind.com)
+# Host updates.maxmind.com
+
+# Optional: Proxy configuration if needed
+# Proxy http://proxy.example.com:8080
+# ProxyUserPassword username:password

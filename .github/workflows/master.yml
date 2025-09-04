@@ -38,5 +38,11 @@ jobs:
     - name: Run Ansible playbook
       env:
         DEPLOY_ENV: ${{ github.event_name == 'release' && 'production' || 'staging' }}
+        MAXMIND_ACCOUNT_ID: ${{ secrets.MAXMIND_ACCOUNT_ID }}
+        MAXMIND_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
       run: |
-        ansible-playbook -i hosts.ini -e "DEPLOY_ENV=$DEPLOY_ENV" powerdns_setup.yml
+        ansible-playbook -i hosts.ini \
+          -e "DEPLOY_ENV=$DEPLOY_ENV" \
+          -e "maxmind_account_id=$MAXMIND_ACCOUNT_ID" \
+          -e "maxmind_license_key=$MAXMIND_LICENSE_KEY" \
+          powerdns_setup.yml

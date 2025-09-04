@@ -1,0 +1,39 @@
+; Zone file for app.runonflux.io - Production App Routing
+; This zone handles all *.app.runonflux.io subdomains with character-based load balancing
+;
+$TTL 3600
+$ORIGIN app.runonflux.io.
+
+; SOA record for app subdomain
+@       IN      SOA     ns1.runonflux.io. st.runonflux.io. (
+                        2022040801      ; Serial (YYYYMMDDNN)
+                        3600            ; Refresh
+                        600             ; Retry
+                        86400           ; Expire
+                        3600 )          ; Minimum TTL
+
+; Name servers for this subdomain
+                IN      NS      ns1.runonflux.io.
+                IN      NS      ns2.runonflux.io.
+
+; Load Lua functions once in a config record
+_config         IN      LUA     LUA     "dofile('/opt/pdns/scripts/app_routing.lua')"
+
+; Wildcard routing using Lua records
+; This handles all subdomains like myapp.app.runonflux.io  
+*               IN      LUA     CNAME   "dofile('/opt/pdns/scripts/app_routing.lua'); appRouteCname(qname)"
+
+; SOA queries for any subdomain
+*               IN      LUA     SOA     "dofile('/opt/pdns/scripts/app_routing.lua'); appRouteSoa(qname)"
+
+; Debug endpoint to see routing decisions
+_debug          IN      LUA     TXT     "dofile('/opt/pdns/scripts/app_routing.lua'); appRouteDebug(qname)"
+
+; Health check endpoint
+_health         IN      TXT     "Production App Routing - Character-based Load Balancing"
+
+; Load balancer health endpoints for monitoring
+_health.lb1     IN      TXT     "Production LB1 - fdm-lb-1-1.runonflux.io - chars 0-9,a-g"
+_health.lb2     IN      TXT     "Production LB2 - fdm-lb-1-2.runonflux.io - chars h-n"
+_health.lb3     IN      TXT     "Production LB3 - fdm-lb-1-3.runonflux.io - chars o-u"
+_health.lb4     IN      TXT     "Production LB4 - fdm-lb-1-4.runonflux.io - chars v-z"

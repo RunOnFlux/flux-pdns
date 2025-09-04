@@ -1,0 +1,37 @@
+; Zone file for app2.runonflux.io - Staging App Routing
+; This zone handles all *.app2.runonflux.io subdomains with character-based load balancing
+;
+$TTL 3600
+$ORIGIN app2.runonflux.io.
+
+; SOA record for app2 subdomain (staging)
+@       IN      SOA     ns1.runonflux.io. st.runonflux.io. (
+                        2022040801      ; Serial (YYYYMMDDNN)
+                        3600            ; Refresh
+                        600             ; Retry
+                        86400           ; Expire
+                        3600 )          ; Minimum TTL
+
+; Name servers for this subdomain
+                IN      NS      ns1.runonflux.io.
+                IN      NS      ns2.runonflux.io.
+
+; Load Lua functions once in a config record
+_config         IN      LUA     LUA     "dofile('/opt/pdns/scripts/app_routing.lua')"
+
+; Wildcard routing using Lua records
+; This handles all subdomains like myapp.app2.runonflux.io (staging)
+*               IN      LUA     CNAME   "include('_config'); appRouteCname(qname)"
+
+; SOA queries for any subdomain  
+*               IN      LUA     SOA     "include('_config'); appRouteSoa(qname)"
+
+; Debug endpoint to see routing decisions
+_debug          IN      LUA     TXT     "include('_config'); appRouteDebug(qname)"
+
+; Health check endpoint
+_health         IN      TXT     "Staging App Routing - Character-based Load Balancing"
+
+; Load balancer health endpoints for monitoring
+_health.lb1     IN      TXT     "Staging LB1 - fdm-lb-2-1.runonflux.io - chars 0-9,a-m"
+_health.lb2     IN      TXT     "Staging LB2 - fdm-lb-2-2.runonflux.io - chars n-z"

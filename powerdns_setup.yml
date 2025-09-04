@@ -1,7 +1,11 @@
 ---
-- name: Install and configure PowerDNS
+- name: Install and configure PowerDNS with Geo-routing
   hosts: "{{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}"
   become: yes
+  
+  vars:
+    maxmind_account_id: "YOUR_ACCOUNT_ID"  # Replace with actual MaxMind account ID
+    maxmind_license_key: "YOUR_LICENSE_KEY"  # Replace with actual MaxMind license key
 
   tasks:
     - name: Add PowerDNS repository key
@@ -43,10 +47,15 @@
       ansible.builtin.package:
         name:
           - pdns-server
-          - pdns-backend-pipe
+          - pdns-backend-bind
           - python3
           - logrotate
           - nginx
+          - wget
+          - libgeoip1
+          - libmaxminddb0
+          - mmdb-bin
+          - geoipupdate
         state: present
 
     - name: Install Node.js 22.x repository
@@ -58,6 +67,47 @@
         state: latest
         update_cache: yes
 
+    # GeoIP Database Setup with MaxMind
+    - name: Create GeoIP directory
+      ansible.builtin.file:
+        path: /usr/share/GeoIP
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Create GeoIP configuration from template
+      ansible.builtin.template:
+        src: GeoIP.conf.j2
+        dest: /etc/GeoIP.conf
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Run initial GeoIP database update
+      command: /usr/bin/geoipupdate
+      register: geoip_update
+      failed_when: geoip_update.rc != 0
+
+    - name: Verify GeoIP databases exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      with_items:
+        - /usr/share/GeoIP/GeoLite2-City.mmdb
+        - /usr/share/GeoIP/GeoLite2-Country.mmdb
+      register: geoip_files
+      failed_when: not geoip_files.stat.exists
+
+    - name: Set up weekly GeoIP database updates
+      ansible.builtin.cron:
+        name: "Update GeoIP databases"
+        user: root
+        job: "/usr/bin/geoipupdate"
+        weekday: "0"
+        hour: "3"
+        minute: "0"
+
+    # Existing health checker setup
     - name: Create the destination directory
       file:
         path: /opt/healthchecker/src
@@ -90,17 +140,59 @@
       args:
         chdir: /opt/healthchecker/src
 
+    # PowerDNS configuration
+    - name: Create PowerDNS zones directory
+      ansible.builtin.file:
+        path: /etc/powerdns/zones
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
 
-    - name: Copy PowerDNS configuration file
+    - name: Copy PowerDNS main configuration file
       ansible.builtin.template:
-        src: pdns.conf.j2
+        src: pdns-geo.conf.j2
         dest: /etc/powerdns/pdns.conf
         owner: root
         group: root
         mode: '0644'
+        backup: yes
       vars:
         subdomain: "{{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}"
 
+    - name: Copy named.conf for bind backend
+      ansible.builtin.copy:
+        src: named.conf
+        dest: /etc/powerdns/named.conf
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copy zone file for geo-routing
+      ansible.builtin.copy:
+        src: zones/cdn-geo.runonflux.io.zone
+        dest: /etc/powerdns/zones/cdn-geo.runonflux.io.zone
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copy zone file for app routing (production)
+      ansible.builtin.copy:
+        src: zones/app.runonflux.io.zone
+        dest: /etc/powerdns/zones/app.runonflux.io.zone
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copy zone file for app routing (staging)
+      ansible.builtin.copy:
+        src: zones/app2.runonflux.io.zone
+        dest: /etc/powerdns/zones/app2.runonflux.io.zone
+        owner: root
+        group: root
+        mode: '0644'
+
+    # Scripts directory setup
     - name: Ensure /opt/pdns/scripts directory exists
       ansible.builtin.file:
         path: /opt/pdns/scripts
@@ -109,48 +201,26 @@
         group: root
         mode: 0755
 
-    - name: Set variables for STAGING
-      set_fact:
-        APP_LIST:
-          - START: "0"
-            END: "9"
-            IPs: ["fdm-lb-2-1.runonflux.io"]
-          - START: "a"
-            END: "m"
-            IPs: ["fdm-lb-2-1.runonflux.io"]
-          - START: "n"
-            END: "z"
-            IPs: ["fdm-lb-2-2.runonflux.io"]
-      when: DEPLOY_ENV == 'staging'
+    # Note: Variables and pipe backend script no longer needed
+    # App routing is now handled by Lua scripts in zone files
 
-    - name: Set variables for PRODUCTION
-      set_fact:
-        APP_LIST:
-          - START: "0"
-            END: "9"
-            IPs: ["fdm-lb-1-1.runonflux.io"]
-          - START: "a"
-            END: "g"
-            IPs: ["fdm-lb-1-1.runonflux.io"]
-          - START: "h"
-            END: "n"
-            IPs: ["fdm-lb-1-2.runonflux.io"]
-          - START: "o"
-            END: "u"
-            IPs: ["fdm-lb-1-3.runonflux.io"]
-          - START: "v"
-            END: "z"
-            IPs: ["fdm-lb-1-4.runonflux.io"]
-      when: DEPLOY_ENV != 'staging'
-
-    - name: Copy multiple files to remote server
-      ansible.builtin.template:
-        src: scripts/pdns_pipe_backend.py.j2
-        dest: /opt/pdns/scripts/pdns_pipe_backend.py
+    - name: Copy Lua geo-routing script
+      ansible.builtin.copy:
+        src: scripts/geo_routing.lua
+        dest: /opt/pdns/scripts/geo_routing.lua
         owner: root
         group: root
-        mode: 0777
+        mode: '0644'
 
+    - name: Copy Lua app-routing script
+      ansible.builtin.copy:
+        src: scripts/app_routing.lua
+        dest: /opt/pdns/scripts/app_routing.lua
+        owner: root
+        group: root
+        mode: '0644'
+
+    # Logrotate configuration
     - name: Copy PowerDNS logrotate configuration
       ansible.builtin.copy:
         src: pdns_logrotate.conf
@@ -166,11 +236,19 @@
         line: "DEPLOY_ENV={{ DEPLOY_ENV }}"
         state: present
 
+    # Service management
+    - name: Validate PowerDNS configuration
+      command: pdns_server --daemon=no --guardian=no --check-config
+      register: config_check
+      failed_when: config_check.rc != 0
+      changed_when: false
+
     - name: Restart PowerDNS service
       ansible.builtin.systemd:
         name: pdns
         state: restarted
         enabled: yes
+      when: config_check.rc == 0
 
     - name: Ensure logrotate runs daily
       ansible.builtin.cron:
@@ -180,3 +258,43 @@
         day: "*"
         hour: "0"
         minute: "0"
+
+    # Post-deployment verification
+    - name: Wait for PowerDNS to start
+      wait_for:
+        port: 53
+        host: 127.0.0.1
+        delay: 5
+        timeout: 30
+
+    - name: Test DNS resolution for geo-routing domain
+      command: dig @127.0.0.1 cdn-geo.runonflux.io A +short
+      register: geo_dns_test
+      retries: 3
+      delay: 5
+      until: geo_dns_test.rc == 0
+      changed_when: false
+
+    - name: Test DNS resolution for app routing (production)
+      command: dig @127.0.0.1 test.app.runonflux.io CNAME +short
+      register: app_dns_test
+      retries: 3
+      delay: 5
+      until: app_dns_test.rc == 0
+      changed_when: false
+
+    - name: Test DNS resolution for app routing (staging)
+      command: dig @127.0.0.1 test.app2.runonflux.io CNAME +short
+      register: app2_dns_test
+      retries: 3
+      delay: 5
+      until: app2_dns_test.rc == 0
+      changed_when: false
+      when: DEPLOY_ENV == 'staging'
+
+    - name: Display DNS test results
+      debug:
+        msg: |
+          Geo-routing test: {{ geo_dns_test.stdout }}
+          App routing (prod) test: {{ app_dns_test.stdout }}
+          App routing (staging) test: {{ app2_dns_test.stdout | default('N/A - prod environment') }}
