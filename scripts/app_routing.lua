@@ -105,7 +105,7 @@ end
 -- Main routing function for app subdomains
 function appRoute(qname)
     -- Convert to lowercase for consistent matching
-    local domain = string.lower(qname)
+    local domain = string.lower(tostring(qname))
     
     -- Extract the first character of the subdomain
     -- For "myapp.app.runonflux.io", we want the 'm'
