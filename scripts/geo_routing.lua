@@ -70,7 +70,8 @@ function geoRoute()
     local available_ips = ifportup(443, all_ips, {
         timeout = 2000,        -- 2 seconds in milliseconds
         minimumFailures = 3,   -- 3 consecutive failures before marking as down
-        interval = 2          -- Check every 2 seconds
+        interval = 2,          -- Check every 2 seconds
+        selector = 'all'       -- Return ALL healthy servers, not just one
     })
     
     -- Filter out servers that are still in recovery period
@@ -120,7 +121,8 @@ function geoRouteWeighted()
     local available_ips = ifportup(443, all_ips, {
         timeout = 2000,
         minimumFailures = 3,
-        interval = 2
+        interval = 2,
+        selector = 'all'       -- Return ALL healthy servers, not just one
     })
     
     -- Filter recovered servers
@@ -174,7 +176,8 @@ function getServerStatus()
     local available_ips = ifportup(443, all_ips, {
         timeout = 2000,
         minimumFailures = 3,
-        interval = 2
+        interval = 2,
+        selector = 'all'       -- Return ALL healthy servers, not just one
     })
     
     local status = {}

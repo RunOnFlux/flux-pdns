@@ -44,3 +44,12 @@ _health.asia-east IN    TXT     "Hong Kong Asia - cdn-4.runonflux.io - 114.29.23
 test.us-west    IN      A       107.152.47.137
 test.eu-west    IN      A       51.159.52.154
 test.asia-east  IN      A       114.29.237.116
+
+; Test pickclosest function without health checks
+test-geo        IN      LUA     A       "pickclosest({'107.152.47.137', '51.159.52.154', '114.29.237.116'})"
+
+; Test the geoRoute function with debugging
+test-debug      IN      LUA     A       ";include('_config'); local result = geoRoute(); return result or '1.1.1.1'"
+
+; Test health check results
+test-health     IN      LUA     TXT     ";include('_config'); local all = getAllServerIPs(); local up = ifportup(443, all, {timeout=2000, minimumFailures=3, interval=2}); return table.concat(up, ',')"
