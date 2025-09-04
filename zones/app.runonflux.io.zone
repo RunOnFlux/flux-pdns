@@ -21,13 +21,13 @@ _config         IN      LUA     LUA     "dofile('/opt/pdns/scripts/app_routing.l
 
 ; Wildcard routing using Lua records
 ; This handles all subdomains like myapp.app.runonflux.io  
-*               IN      LUA     CNAME   "dofile('/opt/pdns/scripts/app_routing.lua'); appRouteCname(qname)"
+*               IN      LUA     CNAME   ";include('_config'); return appRouteCname(qname)"
 
 ; SOA queries for any subdomain
-*               IN      LUA     SOA     "dofile('/opt/pdns/scripts/app_routing.lua'); appRouteSoa(qname)"
+*               IN      LUA     SOA     ";include('_config'); return appRouteSoa(qname)"
 
 ; Debug endpoint to see routing decisions
-_debug          IN      LUA     TXT     "dofile('/opt/pdns/scripts/app_routing.lua'); appRouteDebug(qname)"
+_debug          IN      LUA     TXT     ";include('_config'); return appRouteDebug(qname)"
 
 ; Health check endpoint
 _health         IN      TXT     "Production App Routing - Character-based Load Balancing"
