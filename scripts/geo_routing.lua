@@ -65,12 +65,12 @@ end
 function geoRoute()
     local all_ips = getAllServerIPs()
     
-    -- Health check: port 80 (HTTP), 2 second timeout, 3 failures threshold
-    -- This returns only the IPs that are currently responding (mock servers)
+    -- Health check: port 443 (HTTPS), 15 second interval, 3 failures = 45 seconds to detect failure
+    -- This returns only the IPs that are currently responding
     local available_ips = ifportup(443, all_ips, {
-        timeout = 2000,        -- 2 seconds in milliseconds
+        timeout = 2000,        -- 2 seconds connection timeout in milliseconds
         minimumFailures = 3,   -- 3 consecutive failures before marking as down
-        interval = 2,          -- Check every 2 seconds
+        interval = 15,         -- Check every 15 seconds (balanced approach)
         selector = 'all'       -- Return ALL healthy servers, not just one
     })
     
@@ -121,7 +121,7 @@ function geoRouteWeighted()
     local available_ips = ifportup(443, all_ips, {
         timeout = 2000,
         minimumFailures = 3,
-        interval = 2,
+        interval = 15,         -- Check every 15 seconds
         selector = 'all'       -- Return ALL healthy servers, not just one
     })
     
@@ -176,7 +176,7 @@ function getServerStatus()
     local available_ips = ifportup(443, all_ips, {
         timeout = 2000,
         minimumFailures = 3,
-        interval = 2,
+        interval = 15,         -- Check every 15 seconds
         selector = 'all'       -- Return ALL healthy servers, not just one
     })
     

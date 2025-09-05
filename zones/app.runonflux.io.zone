@@ -5,22 +5,21 @@ $TTL 3600
 $ORIGIN app.runonflux.io.
 
 ; SOA record for app subdomain
-@       IN      SOA     ns1.runonflux.io. st.runonflux.io. (
-                        2022040801      ; Serial (YYYYMMDDNN)
+@       IN      SOA     pdns1.runonflux.io. hostmaster.runonflux.io. (
+                        2025090401      ; Serial (YYYYMMDDNN)
                         3600            ; Refresh
                         600             ; Retry
                         86400           ; Expire
                         3600 )          ; Minimum TTL
 
 ; Name servers for this subdomain
-                IN      NS      ns1.runonflux.io.
-                IN      NS      ns2.runonflux.io.
+                IN      NS      pdns1.runonflux.io.
 
 ; Load Lua functions once in a config record
 _config         IN      LUA     LUA     "dofile('/opt/pdns/scripts/app_routing.lua')"
 
 ; Wildcard routing using Lua records
-; This handles all subdomains like myapp.app.runonflux.io  
+; This handles all subdomains like myapp.app.runonflux.io
 *               IN      LUA     CNAME   ";include('_config'); return appRouteCname(qname)"
 
 ; SOA queries for any subdomain

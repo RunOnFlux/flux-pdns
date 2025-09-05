@@ -5,16 +5,17 @@ $TTL 3600
 $ORIGIN app2.runonflux.io.
 
 ; SOA record for app2 subdomain (staging)
-@       IN      SOA     ns1.runonflux.io. st.runonflux.io. (
-                        2022040801      ; Serial (YYYYMMDDNN)
+@       IN      SOA     nsdev1.runonflux.io. hostmaster.runonflux.io. (
+                        2025090401      ; Serial (YYYYMMDDNN)
                         3600            ; Refresh
                         600             ; Retry
                         86400           ; Expire
                         3600 )          ; Minimum TTL
 
 ; Name servers for this subdomain
-                IN      NS      ns1.runonflux.io.
-                IN      NS      ns2.runonflux.io.
+                IN      NS      nsdev1.runonflux.io.
+                IN      NS      nsdev2.runonflux.io.
+                IN      NS      nsdev3.runonflux.io.
 
 ; Load Lua functions once in a config record
 _config         IN      LUA     LUA     "dofile('/opt/pdns/scripts/app_routing.lua')"
