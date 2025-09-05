@@ -4,7 +4,7 @@ $ORIGIN cdn-geo.runonflux.io.
 @       IN  SOA ns1.runonflux.io. hostmaster.runonflux.io. (
             2025090401  ; Serial (YYYYMMDDVV)
             3600        ; Refresh (1 hour)
-            600         ; Retry (10 minutes) 
+            600         ; Retry (10 minutes)
             86400       ; Expire (24 hours)
             3600        ; Minimum TTL (1 hour)
         )
@@ -14,7 +14,7 @@ $ORIGIN cdn-geo.runonflux.io.
 @       IN  NS  ns2.runonflux.io.
 @       IN  NS  ns3.runonflux.io.
 
-; Load Lua functions once in a config record  
+; Load Lua functions once in a config record
 _config IN  LUA LUA "dofile('/opt/pdns/scripts/geo_routing_docker.lua')"
 
 ; Geo-routing A record using Docker-specific Lua script with mock servers
@@ -25,7 +25,7 @@ weighted 120 IN LUA A   ";include('_config'); return geoRouteWeighted()"
 
 ; Direct access to individual mock CDN servers for testing
 cdn-6-mock   IN  A   172.25.0.50
-cdn-10-mock  IN  A   172.25.0.51  
+cdn-1-mock   IN  A   172.25.0.51
 cdn-4-mock   IN  A   172.25.0.52
 
 ; Status endpoint for monitoring (returns server health info)

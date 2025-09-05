@@ -46,9 +46,9 @@ CDN_SERVERS = [
         "port": 443,
     },
     {
-        "name": "cdn-10.runonflux.io",
-        "ip": "51.159.52.154",
-        "location": "Paris, EU",
+        "name": "cdn-1.runonflux.io",
+        "ip": "5.39.57.50",
+        "location": "Dunkerque, EU",
         "port": 443,
     },
     {

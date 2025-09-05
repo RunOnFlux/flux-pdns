@@ -12,16 +12,16 @@ servers = {
         lon = -122.4194
     },
     {
-        name = "cdn-10.runonflux.io", 
-        ip = "51.159.52.154",
+        name = "cdn-1.runonflux.io",
+        ip = "5.39.57.50",
         location = "eu-west",
         continent = "EU",
-        lat = 48.8566,
-        lon = 2.3522
+        lat = 51.0344,
+        lon = 2.3768
     },
     {
         name = "cdn-4.runonflux.io",
-        ip = "114.29.237.116", 
+        ip = "114.29.237.116",
         location = "asia-east",
         continent = "AS",
         lat = 22.3193,
@@ -49,7 +49,7 @@ function isServerRecovered(ip)
         -- Server hasn't been marked as recovering, so it's available
         return true
     end
-    
+
     -- Check if 5 minutes (300 seconds) have passed since recovery
     local current_time = os.time()
     if current_time - recovery_time >= 300 then
@@ -57,14 +57,14 @@ function isServerRecovered(ip)
         recovery_times[ip] = nil
         return true
     end
-    
+
     return false
 end
 
 -- Main geo-routing function called by PowerDNS
 function geoRoute()
     local all_ips = getAllServerIPs()
-    
+
     -- Health check: port 443 (HTTPS), 15 second interval, 3 failures = 45 seconds to detect failure
     -- This returns only the IPs that are currently responding
     local available_ips = ifportup(443, all_ips, {
@@ -73,7 +73,7 @@ function geoRoute()
         interval = 15,         -- Check every 15 seconds (balanced approach)
         selector = 'all'       -- Return ALL healthy servers, not just one
     })
-    
+
     -- Filter out servers that are still in recovery period
     local healthy_ips = {}
     for _, ip in ipairs(available_ips) do
@@ -81,7 +81,7 @@ function geoRoute()
             table.insert(healthy_ips, ip)
         end
     end
-    
+
     -- Track newly recovered servers
     for _, ip in ipairs(available_ips) do
         local was_down = true
@@ -91,23 +91,23 @@ function geoRoute()
                 break
             end
         end
-        
+
         -- If server is available but not in healthy list, it's recovering
         if was_down and recovery_times[ip] == nil then
             recovery_times[ip] = os.time()
         end
     end
-    
+
     -- If no healthy servers are available, use all available servers as fallback
     if #healthy_ips == 0 then
         healthy_ips = available_ips
     end
-    
+
     -- If still no servers available, return all servers (last resort)
     if #healthy_ips == 0 then
         return all_ips
     end
-    
+
     -- Use pickclosest to select geographically nearest server
     -- This function uses the GeoIP data of the requesting client
     return pickclosest(healthy_ips)
@@ -116,7 +116,7 @@ end
 -- Alternative function for weighted geographic routing
 function geoRouteWeighted()
     local all_ips = getAllServerIPs()
-    
+
     -- Health check with same parameters as above
     local available_ips = ifportup(443, all_ips, {
         timeout = 2000,
@@ -124,7 +124,7 @@ function geoRouteWeighted()
         interval = 15,         -- Check every 15 seconds
         selector = 'all'       -- Return ALL healthy servers, not just one
     })
-    
+
     -- Filter recovered servers
     local healthy_ips = {}
     for _, ip in ipairs(available_ips) do
@@ -132,7 +132,7 @@ function geoRouteWeighted()
             table.insert(healthy_ips, ip)
         end
     end
-    
+
     -- Track recovery
     for _, ip in ipairs(available_ips) do
         local was_down = true
@@ -146,7 +146,7 @@ function geoRouteWeighted()
             recovery_times[ip] = os.time()
         end
     end
-    
+
     -- Fallback logic
     if #healthy_ips == 0 then
         healthy_ips = available_ips
@@ -154,7 +154,7 @@ function geoRouteWeighted()
     if #healthy_ips == 0 then
         return all_ips
     end
-    
+
     -- Return weighted selection based on geographic distribution
     -- This can be customized based on traffic patterns
     return pickwrandom(healthy_ips)
@@ -179,7 +179,7 @@ function getServerStatus()
         interval = 15,         -- Check every 15 seconds
         selector = 'all'       -- Return ALL healthy servers, not just one
     })
-    
+
     local status = {}
     for _, server in ipairs(servers) do
         local is_available = false
@@ -189,9 +189,9 @@ function getServerStatus()
                 break
             end
         end
-        
+
         local is_healthy = is_available and isServerRecovered(server.ip)
-        
+
         table.insert(status, {
             name = server.name,
             ip = server.ip,
@@ -201,6 +201,6 @@ function getServerStatus()
             recovering = is_available and not is_healthy
         })
     end
-    
+
     return status
 end

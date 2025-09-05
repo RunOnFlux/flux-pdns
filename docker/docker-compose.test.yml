@@ -55,17 +55,17 @@ services:
       timeout: 3s
       retries: 3
 
-  cdn-10-mock:
+  cdn-1-mock:
     image: nginx:alpine
-    container_name: cdn-10-mock
-    hostname: cdn-10-mock
+    container_name: cdn-1-mock
+    hostname: cdn-1-mock
     networks:
       dns-test-network:
         ipv4_address: 172.25.0.51
     ports:
       - "8082:80"
     volumes:
-      - ./cdn-mock/cdn-10:/usr/share/nginx/html:ro
+      - ./cdn-mock/cdn-1:/usr/share/nginx/html:ro
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
       interval: 5s

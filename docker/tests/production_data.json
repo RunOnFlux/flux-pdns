@@ -99,7 +99,7 @@
       {
         "domain": "cdn-geo.runonflux.io",
         "qtype": "A",
-        "expected_contains": ["cdn-6.runonflux.io", "cdn-10.runonflux.io", "cdn-4.runonflux.io"],
+        "expected_contains": ["cdn-6.runonflux.io", "cdn-1.runonflux.io", "cdn-4.runonflux.io"],
         "description": "Should resolve to one of the CDN servers based on geo-location"
       }
     ]

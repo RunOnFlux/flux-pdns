@@ -16,7 +16,7 @@ DNS_SERVER="${1:-127.0.0.1}"
 TEST_DOMAIN="cdn-geo.runonflux.io"
 CDN_SERVERS=(
     "cdn-6.runonflux.io:107.152.47.137:West Coast USA"
-    "cdn-10.runonflux.io:51.159.52.154:Paris EU"
+    "cdn-1.runonflux.io:5.39.57.50:Dunkerque EU"
     "cdn-4.runonflux.io:114.29.237.116:Hong Kong Asia"
 )
 

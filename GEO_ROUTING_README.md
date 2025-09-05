@@ -16,7 +16,7 @@ The geo-routing system provides:
 | Server | IP Address | Location | Hostname |
 |--------|------------|----------|----------|
 | CDN-6 | 107.152.47.137 | West Coast USA | cdn-6.runonflux.io |
-| CDN-10 | 51.159.52.154 | Paris, EU | cdn-10.runonflux.io |
+| CDN-1 | 5.39.57.50 | Dunkerque, EU | cdn-1.runonflux.io |
 | CDN-4 | 114.29.237.116 | Hong Kong, East Asia | cdn-4.runonflux.io |
 
 ## Architecture
@@ -179,7 +179,7 @@ Returns the IP of the geographically closest healthy CDN server.
 ### Direct Server Queries (for testing)
 ```bash
 dig cdn-6.runonflux.io A   # West Coast USA
-dig cdn-10.runonflux.io A  # Paris, EU
+dig cdn-1.runonflux.io A   # Dunkerque, EU
 dig cdn-4.runonflux.io A   # Hong Kong, Asia
 ```
 

@@ -6,7 +6,7 @@
 local production_mappings = {
     -- Characters 0-9, a-g -> fdm-lb-1-1.runonflux.io
     ['0'] = "fdm-lb-1-1.runonflux.io",
-    ['1'] = "fdm-lb-1-1.runonflux.io", 
+    ['1'] = "fdm-lb-1-1.runonflux.io",
     ['2'] = "fdm-lb-1-1.runonflux.io",
     ['3'] = "fdm-lb-1-1.runonflux.io",
     ['4'] = "fdm-lb-1-1.runonflux.io",
@@ -22,7 +22,7 @@ local production_mappings = {
     ['e'] = "fdm-lb-1-1.runonflux.io",
     ['f'] = "fdm-lb-1-1.runonflux.io",
     ['g'] = "fdm-lb-1-1.runonflux.io",
-    
+
     -- Characters h-n -> fdm-lb-1-2.runonflux.io
     ['h'] = "fdm-lb-1-2.runonflux.io",
     ['i'] = "fdm-lb-1-2.runonflux.io",
@@ -31,7 +31,7 @@ local production_mappings = {
     ['l'] = "fdm-lb-1-2.runonflux.io",
     ['m'] = "fdm-lb-1-2.runonflux.io",
     ['n'] = "fdm-lb-1-2.runonflux.io",
-    
+
     -- Characters o-u -> fdm-lb-1-3.runonflux.io
     ['o'] = "fdm-lb-1-3.runonflux.io",
     ['p'] = "fdm-lb-1-3.runonflux.io",
@@ -40,7 +40,7 @@ local production_mappings = {
     ['s'] = "fdm-lb-1-3.runonflux.io",
     ['t'] = "fdm-lb-1-3.runonflux.io",
     ['u'] = "fdm-lb-1-3.runonflux.io",
-    
+
     -- Characters v-z -> fdm-lb-1-4.runonflux.io
     ['v'] = "fdm-lb-1-4.runonflux.io",
     ['w'] = "fdm-lb-1-4.runonflux.io",
@@ -75,7 +75,7 @@ local staging_mappings = {
     ['k'] = "fdm-lb-2-1.runonflux.io",
     ['l'] = "fdm-lb-2-1.runonflux.io",
     ['m'] = "fdm-lb-2-1.runonflux.io",
-    
+
     -- Characters n-z -> fdm-lb-2-2.runonflux.io
     ['n'] = "fdm-lb-2-2.runonflux.io",
     ['o'] = "fdm-lb-2-2.runonflux.io",
@@ -108,14 +108,14 @@ end
 function appRoute(qname)
     -- Convert to lowercase for consistent matching
     local domain = string.lower(tostring(qname))
-    
+
     -- Extract the first character of the subdomain
     -- For "myapp.app.runonflux.io", we want the 'm'
     local first_char = string.sub(domain, 1, 1)
-    
+
     -- Determine environment
     local env = getEnvironment(domain)
-    
+
     -- Select appropriate mapping table
     local mappings
     if env == "staging" then
@@ -123,10 +123,10 @@ function appRoute(qname)
     else
         mappings = production_mappings
     end
-    
+
     -- Look up the load balancer for this character
     local target = mappings[first_char]
-    
+
     if target then
         return target
     else
@@ -150,14 +150,14 @@ function appRouteCname(qname)
     end
 end
 
--- Function for SOA queries (matching pipe backend behavior)  
+-- Function for SOA queries (matching zone file configuration)
 function appRouteSoa(qname)
-    -- Return SOA record similar to what the pipe backend provides
+    -- Return SOA record matching the zone files
     local env = getEnvironment(qname)
     if env == "staging" then
-        return "ns1.runonflux.io admin.runonflux.io 2022040801 3600 600 86400 3600"
+        return "pdns2.runonflux.io hostmaster.runonflux.io 2025090401 3600 600 86400 3600"
     else
-        return "ns1.runonflux.io admin.runonflux.io 2022040801 3600 600 86400 3600"
+        return "pdns1.runonflux.io hostmaster.runonflux.io 2025090401 3600 600 86400 3600"
     end
 end
 
@@ -167,8 +167,7 @@ function appRouteDebug(qname)
     local first_char = string.sub(domain, 1, 1)
     local env = getEnvironment(domain)
     local target = appRoute(qname)
-    
-    return string.format("Domain: %s, First char: %s, Env: %s, Target: %s", 
+
+    return string.format("Domain: %s, First char: %s, Env: %s, Target: %s",
                         domain, first_char, env, target)
 end
-
