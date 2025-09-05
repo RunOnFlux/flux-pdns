@@ -72,8 +72,16 @@
           - geoipupdate
         state: present
 
+    - name: Download Node.js 22.x setup script
+      ansible.builtin.get_url:
+        url: "https://deb.nodesource.com/setup_22.x"
+        dest: /tmp/nodejs_setup.sh
+        mode: '0755'
+
     - name: Install Node.js 22.x repository
-      shell: "curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -"
+      ansible.builtin.shell:
+        cmd: /tmp/nodejs_setup.sh
+        creates: /etc/apt/sources.list.d/nodesource.list
 
     - name: Install Node.js
       apt:
