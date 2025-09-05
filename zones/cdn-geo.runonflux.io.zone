@@ -28,18 +28,18 @@ weighted        120     IN      LUA     A       ";include('_config'); return geo
 ; Direct server records for fallback/testing purposes
 ; These allow direct access to specific CDN servers if needed
 us-west         IN      A       107.152.47.137  ; cdn-6.runonflux.io
-eu-west         IN      A       51.159.52.154   ; cdn-10.runonflux.io
+eu-west         IN      A       5.39.57.50      ; cdn-1.runonflux.io
 asia-east       IN      A       114.29.237.116  ; cdn-4.runonflux.io
 
 ; Monitoring and status endpoints
 ; These provide visibility into the health checking system
 _status         IN      LUA     TXT     ";include('_config'); return getServerStatus()"
 _health.us-west IN      TXT     "West Coast USA - cdn-6.runonflux.io - 107.152.47.137"
-_health.eu-west IN      TXT     "Paris EU - cdn-10.runonflux.io - 51.159.52.154"
+_health.eu-west IN      TXT     "Paris EU - cdn-1.runonflux.io - 5.39.57.50"
 _health.asia-east IN    TXT     "Hong Kong Asia - cdn-4.runonflux.io - 114.29.237.116"
 
 ; Test endpoints for each geographic region
 ; Useful for debugging and validating geo-routing behavior
 test.us-west    IN      A       107.152.47.137
-test.eu-west    IN      A       51.159.52.154
+test.eu-west    IN      A       5.39.57.50
 test.asia-east  IN      A       114.29.237.116
