@@ -225,6 +225,7 @@
         group: root
         mode: "0600"
 
+
     - name: Generate TSIG key for ACME challenges (master servers only)
       ansible.builtin.shell:
         cmd: |

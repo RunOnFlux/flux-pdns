@@ -66,12 +66,9 @@ secondary=no
 {% endfor %}
 
 # Configure TSIG for zone transfers
+# TSIG keys are loaded from the bind configuration and key files
 # When TSIG is configured, allow-axfr-ips is ignored for TSIG-authenticated requests
-# We keep localhost for debugging without TSIG
 allow-axfr-ips=127.0.0.1
-
-# Allow AXFR with TSIG key "zone-transfer" for all zones
-tsig-allow-axfr=zone-transfer
 
 # Notify slaves when zones change
 also-notify={{ slave_ips | join(',') }}
