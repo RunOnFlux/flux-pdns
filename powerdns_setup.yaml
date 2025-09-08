@@ -203,8 +203,8 @@
       ansible.builtin.file:
         path: /etc/powerdns/tsig-keys
         state: directory
-        owner: root
-        group: root
+        owner: pdns
+        group: pdns
         mode: "0700"
 
     - name: Set environment for TSIG key selection
@@ -221,8 +221,8 @@
       ansible.builtin.template:
         src: templates/tsig-zone-transfer.key.j2
         dest: /etc/powerdns/tsig-keys/zone-transfer.conf
-        owner: root
-        group: root
+        owner: pdns
+        group: pdns
         mode: "0600"
 
 
