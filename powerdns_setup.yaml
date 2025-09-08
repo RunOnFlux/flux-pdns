@@ -302,33 +302,29 @@
         pdnsutil import-tsig-key zone-transfer hmac-sha256 "{{ powerdns[env].tsig_zone_transfer_key }}"
       when: "'zone-transfer' not in tsig_key_exists.stdout"
 
-    - name: Configure TSIG metadata for domains
-      ansible.builtin.shell: |
-        current=$(pdnsutil get-meta "{{ item }}" TSIG-ALLOW-AXFR 2>/dev/null || echo "")
-        if [[ "$current" != *"zone-transfer"* ]]; then
-          pdnsutil set-meta "{{ item }}" TSIG-ALLOW-AXFR zone-transfer
-          echo "CHANGED"
-        else
-          echo "ALREADY_SET"
-        fi
+    - name: Check TSIG metadata for domains
+      ansible.builtin.shell: pdnsutil get-meta "{{ item }}" TSIG-ALLOW-AXFR | grep -c "zone-transfer" || echo "0"
       loop: "{{ powerdns[env].zones }}"
-      register: tsig_meta_result
-      changed_when: "'CHANGED' in tsig_meta_result.stdout"
+      register: tsig_check
+      changed_when: false
+      when: pdns_role == 'master'
+
+    - name: Configure TSIG metadata for domains
+      ansible.builtin.command: pdnsutil set-meta "{{ item }}" TSIG-ALLOW-AXFR zone-transfer
+      loop: "{{ powerdns[env].zones }}"
+      when: pdns_role == 'master' and tsig_check.results[ansible_loop.index0].stdout == "0"
+
+    - name: Check SOA-EDIT-API metadata for domains
+      ansible.builtin.shell: pdnsutil get-meta "{{ item }}" SOA-EDIT-API | grep -c "INCREMENT" || echo "0"
+      loop: "{{ powerdns[env].zones }}"
+      register: soa_check
+      changed_when: false
       when: pdns_role == 'master'
 
     - name: Configure SOA-EDIT-API for certbot compatibility
-      ansible.builtin.shell: |
-        current=$(pdnsutil get-meta "{{ item }}" SOA-EDIT-API 2>/dev/null || echo "")
-        if [ "$current" != "INCREMENT" ]; then
-          pdnsutil set-meta "{{ item }}" SOA-EDIT-API INCREMENT
-          echo "CHANGED"
-        else
-          echo "ALREADY_SET"
-        fi
+      ansible.builtin.command: pdnsutil set-meta "{{ item }}" SOA-EDIT-API INCREMENT
       loop: "{{ powerdns[env].zones }}"
-      register: soa_edit_result
-      changed_when: "'CHANGED' in soa_edit_result.stdout"
-      when: pdns_role == 'master'
+      when: pdns_role == 'master' and soa_check.results[ansible_loop.index0].stdout == "0"
 
     # Scripts directory setup
     - name: Ensure /opt/pdns/scripts directory exists
