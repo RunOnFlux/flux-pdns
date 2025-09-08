@@ -21,6 +21,13 @@ pdns_auth_version: "49"
 # These keys must be the same on all servers in each respective environment
 tsig:
   staging:
-    zone_transfer_key: "REPLACE_WITH_STAGING_KEY"
+    zone_transfer_key: "REPLACE_WITH_STAGING_ZONE_TRANSFER_KEY"
   production:
-    zone_transfer_key: "REPLACE_WITH_PRODUCTION_KEY"
+    zone_transfer_key: "REPLACE_WITH_PRODUCTION_ZONE_TRANSFER_KEY"
+
+# PowerDNS API keys for certbot (generate with: openssl rand -base64 32)
+pdns_api:
+  staging:
+    key: "REPLACE_WITH_STAGING_API_KEY"
+  production:
+    key: "REPLACE_WITH_PRODUCTION_API_KEY"
