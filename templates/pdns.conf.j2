@@ -49,7 +49,36 @@ receiver-threads=2
 max-tcp-connections=20
 max-queue-length=5000
 
-# Zone transfer settings
-allow-axfr-ips=127.0.0.1
-primary=no
+# Master/Slave replication settings
+{% set server_role = pdns_role | default('slave') %}
+
+{% if server_role == 'master' %}
+# Master server configuration
+primary=yes
 secondary=no
+
+# Collect slave IPs from inventory
+{% set slave_ips = [] %}
+{% for host in groups[group_names[0]] %}
+  {% if hostvars[host].pdns_role == 'slave' %}
+    {% set _ = slave_ips.append(hostvars[host].ansible_host) %}
+  {% endif %}
+{% endfor %}
+
+allow-axfr-ips=127.0.0.1,{{ slave_ips | join(',') }}
+also-notify={{ slave_ips | join(',') }}
+
+# Enable DNS updates for ACME challenges
+dnsupdate=yes
+allow-dnsupdate-from=127.0.0.1
+
+{% else %}
+# Slave server configuration
+primary=no
+secondary=yes
+primary-config-file=/etc/powerdns/primary.conf
+allow-axfr-ips=127.0.0.1
+{% endif %}
+
+# TSIG keys for secure zone transfers and DNS updates
+include-dir=/etc/powerdns/tsig-keys

@@ -2,23 +2,21 @@
 - name: Install and configure PowerDNS with Geo-routing
   hosts: "{{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}"
   become: yes
-  
-  vars:
-    maxmind_account_id: "YOUR_ACCOUNT_ID"  # Replace with actual MaxMind account ID
-    maxmind_license_key: "YOUR_LICENSE_KEY"  # Replace with actual MaxMind license key
+  vars_files:
+    - vars.yaml
 
   tasks:
     - name: Create apt keyrings directory
       ansible.builtin.file:
         path: /etc/apt/keyrings
         state: directory
-        mode: '0755'
+        mode: "0755"
 
     - name: Download PowerDNS repository key
       ansible.builtin.get_url:
         url: "https://repo.powerdns.com/FD380FBB-pub.asc"
         dest: /tmp/powerdns-key.asc
-        mode: '0644'
+        mode: "0644"
 
     - name: Add PowerDNS repository key to keyring
       ansible.builtin.shell:
@@ -30,17 +28,11 @@
         repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/powerdns.gpg] http://repo.powerdns.com/ubuntu {{ ansible_distribution_release }}-auth-{{ pdns_auth_version }} main"
         state: present
         filename: powerdns
-      vars:
-        pdns_auth_version: "49"
 
     - name: Update apt cache
       ansible.builtin.apt:
         update_cache: yes
-
-    - name: Delete content & directory
-      ansible.builtin.file:
-        state: absent
-        path: /etc/resolv.conf
+        cache_valid_time: 86400
 
     - name: Copy Resolve configuration file
       ansible.builtin.copy:
@@ -48,7 +40,7 @@
         dest: /etc/resolv.conf
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
 
     - name: Disable and stop systemd-resolved
       ansible.builtin.systemd:
@@ -72,11 +64,17 @@
           - geoipupdate
         state: present
 
+    - name: register state of /etc/apt/sources.list.d/nodesource.list
+      stat:
+        path: /etc/apt/sources.list.d/nodesource.list
+      register: nodesource_path
+
     - name: Download Node.js 22.x setup script
       ansible.builtin.get_url:
         url: "https://deb.nodesource.com/setup_22.x"
         dest: /tmp/nodejs_setup.sh
-        mode: '0755'
+        mode: "0755"
+      when: not nodesource_path.stat.exists
 
     - name: Install Node.js 22.x repository
       ansible.builtin.shell:
@@ -87,7 +85,6 @@
       apt:
         name: nodejs
         state: latest
-        update_cache: yes
 
     # GeoIP Database Setup with MaxMind
     - name: Create GeoIP directory
@@ -96,15 +93,15 @@
         state: directory
         owner: root
         group: root
-        mode: '0755'
+        mode: "0755"
 
     - name: Create GeoIP configuration from template
       ansible.builtin.template:
-        src: GeoIP.conf.j2
+        src: templates/GeoIP.conf.j2
         dest: /etc/GeoIP.conf
         owner: root
         group: root
-        mode: '0600'
+        mode: "0600"
 
     - name: Run initial GeoIP database update
       command: /usr/bin/geoipupdate
@@ -144,7 +141,7 @@
 
     - name: Template the health route
       ansible.builtin.template:
-        src: src/routes/health.js.j2
+        src: templates/health.js.j2
         dest: /opt/healthchecker/src/routes/health.js
         owner: root
         group: root
@@ -155,7 +152,7 @@
     - name: Make sure the start script is executable
       file:
         path: /opt/healthchecker/src/start.sh
-        mode: '0755'
+        mode: "0755"
 
     - name: Start the application
       command: /opt/healthchecker/src/start.sh
@@ -169,26 +166,54 @@
         state: directory
         owner: root
         group: root
-        mode: '0755'
+        mode: "0755"
 
     - name: Copy PowerDNS main configuration file
       ansible.builtin.template:
-        src: pdns-geo.conf.j2
+        src: templates/pdns.conf.j2
         dest: /etc/powerdns/pdns.conf
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
         backup: yes
-      vars:
-        subdomain: "{{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}"
 
     - name: Template named.conf for bind backend
       ansible.builtin.template:
-        src: named.conf.j2
+        src: templates/named.conf.j2
         dest: /etc/powerdns/named.conf
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
+
+    # Master/Slave replication setup
+    - name: Create TSIG keys directory
+      ansible.builtin.file:
+        path: /etc/powerdns/tsig-keys
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Generate TSIG key for zone transfers (master servers only)
+      ansible.builtin.shell:
+        cmd: pdnsutil generate-tsig-key zone-transfer hmac-sha256 > /etc/powerdns/tsig-keys/zone-transfer.conf
+        creates: /etc/powerdns/tsig-keys/zone-transfer.conf
+      when: pdns_role|default('slave') == 'master'
+
+    - name: Generate TSIG key for ACME challenges (master servers only)
+      ansible.builtin.shell:
+        cmd: pdnsutil generate-tsig-key certbot-{{ 'dev' if DEPLOY_ENV == 'staging' else 'prod' }} hmac-sha256 > /etc/powerdns/tsig-keys/certbot.conf
+        creates: /etc/powerdns/tsig-keys/certbot.conf
+      when: pdns_role|default('slave') == 'master'
+
+    - name: Copy primary.conf for slave servers
+      ansible.builtin.template:
+        src: templates/primary.conf.j2
+        dest: /etc/powerdns/primary.conf
+        owner: root
+        group: root
+        mode: "0644"
+      when: pdns_role|default('slave') == 'slave'
 
     - name: Copy zone file for geo-routing (production)
       ansible.builtin.copy:
@@ -196,7 +221,7 @@
         dest: /etc/powerdns/zones/cdn-geo.runonflux.io.zone
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
       when: DEPLOY_ENV == 'production'
 
     - name: Copy zone file for geo-routing (staging)
@@ -205,7 +230,7 @@
         dest: /etc/powerdns/zones/cdn-geodev.runonflux.io.zone
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
       when: DEPLOY_ENV == 'staging'
 
     - name: Copy zone file for app routing (production)
@@ -214,7 +239,7 @@
         dest: /etc/powerdns/zones/app.runonflux.io.zone
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
       when: DEPLOY_ENV == 'production'
 
     - name: Copy zone file for app routing (staging)
@@ -223,7 +248,7 @@
         dest: /etc/powerdns/zones/app2.runonflux.io.zone
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
       when: DEPLOY_ENV == 'staging'
 
     # Scripts directory setup
@@ -244,7 +269,7 @@
         dest: /opt/pdns/scripts/geo_routing.lua
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
 
     - name: Copy Lua app-routing script
       ansible.builtin.copy:
@@ -252,7 +277,7 @@
         dest: /opt/pdns/scripts/app_routing.lua
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
 
     # Logrotate configuration
     - name: Copy PowerDNS logrotate configuration
@@ -261,12 +286,12 @@
         dest: /etc/logrotate.d/pdns
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
 
     - name: Set DEPLOY_ENV environment variable
       ansible.builtin.lineinfile:
         path: /etc/environment
-        regexp: '^DEPLOY_ENV='
+        regexp: "^DEPLOY_ENV="
         line: "DEPLOY_ENV={{ DEPLOY_ENV }}"
         state: present
 
@@ -316,6 +341,29 @@
       delay: 5
       until: app_dns_test.rc == 0
       changed_when: false
+
+    # Master/Slave replication validation
+    - name: Test zone transfer from master (slave servers only)
+      command: dig @{{ ansible_default_ipv4.address }} {{ 'cdn-geodev.runonflux.io' if DEPLOY_ENV == 'staging' else 'cdn-geo.runonflux.io' }} AXFR
+      register: axfr_test
+      retries: 3
+      delay: 10
+      until: axfr_test.rc == 0
+      changed_when: false
+      when: pdns_role|default('slave') == 'slave'
+
+    - name: Validate TSIG keys exist on master servers
+      ansible.builtin.stat:
+        path: /etc/powerdns/tsig-keys/certbot.conf
+      register: tsig_key_check
+      failed_when: not tsig_key_check.stat.exists
+      when: pdns_role|default('slave') == 'master'
+
+    - name: Test DNS update capability on master servers
+      command: pdnsutil list-keys {{ 'cdn-geodev.runonflux.io' if DEPLOY_ENV == 'staging' else 'cdn-geo.runonflux.io' }}
+      register: key_list_test
+      changed_when: false
+      when: pdns_role|default('slave') == 'master'
 
     - name: Test DNS resolution for app routing (staging)
       command: dig @127.0.0.1 test.app2.runonflux.io CNAME +short

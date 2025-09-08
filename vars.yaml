@@ -1,0 +1,18 @@
+# PowerDNS Configuration Variables
+powerdns:
+  staging:
+    zones:
+      - cdn-geodev.runonflux.io
+      - app2.runonflux.io
+  production:
+    zones:
+      - cdn-geo.runonflux.io
+      - app.runonflux.io
+
+# MaxMind GeoIP configuration
+maxmind:
+  account_id: "YOUR_ACCOUNT_ID"
+  license_key: "YOUR_LICENSE_KEY"
+
+# Common settings
+pdns_auth_version: "49"

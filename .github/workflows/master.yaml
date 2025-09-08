@@ -1,0 +1,48 @@
+name: Deploy PowerDNS configuration
+
+on:
+  push:
+    branches:
+      - master
+  release:
+    types:
+      - created
+
+jobs:
+  deploy:
+    runs-on: runonflux
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.x"
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Set up SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > private_key
+          chmod 600 private_key
+          echo "Host *" >> ~/.ssh/config
+          echo "  IdentityFile $(pwd)/private_key" >> ~/.ssh/config
+          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
+
+      - name: Run Ansible playbook
+        env:
+          DEPLOY_ENV: ${{ github.event_name == 'release' && 'production' || 'staging' }}
+          MAXMIND_ACCOUNT_ID: ${{ secrets.MAXMIND_ACCOUNT_ID }}
+          MAXMIND_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
+        run: |
+          ansible-playbook -i hosts.yaml \
+            -e "DEPLOY_ENV=$DEPLOY_ENV" \
+            -e "maxmind.account_id=$MAXMIND_ACCOUNT_ID" \
+            -e "maxmind.license_key=$MAXMIND_LICENSE_KEY" \
+            powerdns_setup.yaml

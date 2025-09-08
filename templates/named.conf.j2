@@ -1,0 +1,21 @@
+// PowerDNS Bind backend configuration
+// This file defines the zones that PowerDNS will serve using the bind backend
+// 
+// IMPORTANT: This uses PowerDNS bind backend syntax, not standard BIND9 syntax
+// Security is handled at the PowerDNS level in pdns.conf, not here
+
+options {
+    directory "/etc/powerdns/zones";
+};
+
+{% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
+{% set zones = powerdns[env].zones %}
+
+// Configure zones dynamically based on environment
+{% for zone in zones %}
+zone "{{ zone }}" {
+    type master;
+    file "/etc/powerdns/zones/{{ zone }}.zone";
+};
+
+{% endfor %}

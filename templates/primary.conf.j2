@@ -1,0 +1,23 @@
+# Primary server configuration for slave PowerDNS servers
+# This file specifies which master server to replicate from
+
+{% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
+{% set zones = powerdns[env].zones %}
+
+# Get master server IP from current group
+{% set master_ip = None %}
+{% for host in groups[group_names[0]] %}
+  {% if hostvars[host].pdns_role == 'master' %}
+    {% set master_ip = hostvars[host].ansible_host %}
+    {% break %}
+  {% endif %}
+{% endfor %}
+
+# Configure zones from master server
+{% for zone in zones %}
+primary {{ master_ip }} {
+    type primary;
+    file "/etc/powerdns/zones/{{ zone }}.zone";
+};
+
+{% endfor %}
