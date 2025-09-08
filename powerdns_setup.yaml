@@ -284,7 +284,6 @@
         zone2sql --named-conf=/etc/powerdns/named.conf --gsqlite | sqlite3 /var/lib/powerdns/pdns.sqlite3
       when: zone_count.stdout | int == 0
 
-
     - name: Optimize database after zone import and fixes
       ansible.builtin.shell: |
         echo "ANALYZE;" | sqlite3 /var/lib/powerdns/pdns.sqlite3
@@ -310,10 +309,18 @@
       loop: "{{ powerdns[env].zones }}"
       when: pdns_role == 'master'
 
+    - name: Configure SOA-EDIT for serial increments
+      ansible.builtin.shell: |
+        if ! pdnsutil get-meta "{{ item }}" SOA-EDIT | grep -q "INCEPTION-INCREMENT"; then
+          pdnsutil set-meta "{{ item }}" SOA-EDIT INCEPTION-INCREMENT
+        fi
+      loop: "{{ powerdns[env].zones }}"
+      when: pdns_role == 'master'
+
     - name: Configure SOA-EDIT-API for certbot compatibility
       ansible.builtin.shell: |
-        if ! pdnsutil get-meta "{{ item }}" SOA-EDIT-API | grep -q "INCREMENT"; then
-          pdnsutil set-meta "{{ item }}" SOA-EDIT-API INCREMENT
+        if ! pdnsutil get-meta "{{ item }}" SOA-EDIT-API | grep -q "DEFAULT"; then
+          pdnsutil set-meta "{{ item }}" SOA-EDIT-API DEFAULT
         fi
       loop: "{{ powerdns[env].zones }}"
       when: pdns_role == 'master'
@@ -432,7 +439,6 @@
       register: key_list_test
       changed_when: false
       when: pdns_role == 'master'
-
 
     - name: Test DNS resolution for app routing (staging)
       command: dig @127.0.0.1 test.app2.runonflux.io CNAME +short
