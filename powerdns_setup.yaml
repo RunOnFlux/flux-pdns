@@ -307,6 +307,12 @@
       loop: "{{ powerdns[env].zones }}"
       when: pdns_role|default('slave') == 'master' and "'zone-transfer' not in tsig_key_exists.stdout"
 
+    - name: Configure SOA-EDIT-API for certbot compatibility
+      ansible.builtin.shell: |
+        pdnsutil set-meta "{{ item }}" SOA-EDIT-API INCEPTION-INCREMENT
+      loop: "{{ powerdns[env].zones }}"
+      when: pdns_role|default('slave') == 'master'
+
     # Scripts directory setup
     - name: Ensure /opt/pdns/scripts directory exists
       ansible.builtin.file:
