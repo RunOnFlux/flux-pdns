@@ -436,14 +436,14 @@
         path: /var/lib/powerdns/pdns.sqlite3
       register: pdns_db_check
       failed_when: not pdns_db_check.stat.exists
-      when: pdns_role|default('slave') == 'master'
+      when: pdns_role == 'master'
 
     - name: Test DNS update capability on master servers
       shell: |
         pdnsutil list-zone {{ 'cdn-geodev.runonflux.io' if DEPLOY_ENV == 'staging' else 'cdn-geo.runonflux.io' }}
       register: key_list_test
       changed_when: false
-      when: pdns_role|default('slave') == 'master'
+      when: pdns_role == 'master'
 
 
     - name: Test DNS resolution for app routing (staging)
