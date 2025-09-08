@@ -284,7 +284,13 @@
         zone2sql --named-conf=/etc/powerdns/named.conf --gsqlite | sqlite3 /var/lib/powerdns/pdns.sqlite3
       when: zone_count.stdout | int == 0
 
-    - name: Optimize database after zone import
+    - name: Fix FQDN format in imported zones
+      ansible.builtin.shell: |
+        sqlite3 /var/lib/powerdns/pdns.sqlite3 "UPDATE domains SET name = name || '.' WHERE name NOT LIKE '%.';"
+        sqlite3 /var/lib/powerdns/pdns.sqlite3 "UPDATE records SET name = name || '.' WHERE name NOT LIKE '%.';"
+      when: zone_count.stdout | int == 0
+
+    - name: Optimize database after zone import and fixes
       ansible.builtin.shell: |
         echo "ANALYZE;" | sqlite3 /var/lib/powerdns/pdns.sqlite3
       when: zone_count.stdout | int == 0
@@ -318,8 +324,8 @@
     - name: Configure SOA-EDIT-API for certbot compatibility
       ansible.builtin.shell: |
         current=$(pdnsutil get-meta "{{ item }}" SOA-EDIT-API 2>/dev/null || echo "")
-        if [ "$current" != "INCEPTION-INCREMENT" ]; then
-          pdnsutil set-meta "{{ item }}" SOA-EDIT-API INCEPTION-INCREMENT
+        if [ "$current" != "INCREMENT" ]; then
+          pdnsutil set-meta "{{ item }}" SOA-EDIT-API INCREMENT
           echo "CHANGED"
         else
           echo "ALREADY_SET"

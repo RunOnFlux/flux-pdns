@@ -40,8 +40,8 @@ api-key={{ powerdns[env].api_key }}
 # DNSSEC settings - prevent DNSSEC key responses to avoid REFUSED responses
 direct-dnskey=no
 
-# SOA editing for API updates - use INCEPTION-INCREMENT for proper date-based serials
-default-soa-edit=INCEPTION-INCREMENT
+# SOA editing for API updates - handled by per-zone SOA-EDIT-API metadata
+# default-soa-edit removed to avoid conflicts with SOA-EDIT-API
 
 # Network settings
 local-address=0.0.0.0
