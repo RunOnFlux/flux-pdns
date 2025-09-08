@@ -78,10 +78,10 @@ dnsupdate=yes
 allow-dnsupdate-from=127.0.0.1
 
 {% else %}
-# Slave server configuration
+# Secondary server configuration
 primary=no
 secondary=yes
-slave-renotify=yes
+secondary-do-renotify=yes
 
 # Only localhost can query AXFR (TSIG required for remote)
 allow-axfr-ips=127.0.0.1
