@@ -302,29 +302,21 @@
         pdnsutil import-tsig-key zone-transfer hmac-sha256 "{{ powerdns[env].tsig_zone_transfer_key }}"
       when: "'zone-transfer' not in tsig_key_exists.stdout"
 
-    - name: Check TSIG metadata for domains
-      ansible.builtin.shell: pdnsutil get-meta "{{ item }}" TSIG-ALLOW-AXFR | grep -c "zone-transfer" || echo "0"
-      loop: "{{ powerdns[env].zones }}"
-      register: tsig_check
-      changed_when: false
-      when: pdns_role == 'master'
-
     - name: Configure TSIG metadata for domains
-      ansible.builtin.command: pdnsutil set-meta "{{ item }}" TSIG-ALLOW-AXFR zone-transfer
+      ansible.builtin.shell: |
+        if ! pdnsutil get-meta "{{ item }}" TSIG-ALLOW-AXFR | grep -q "zone-transfer"; then
+          pdnsutil set-meta "{{ item }}" TSIG-ALLOW-AXFR zone-transfer
+        fi
       loop: "{{ powerdns[env].zones }}"
-      when: pdns_role == 'master' and tsig_check.results[ansible_loop.index0].stdout == "0"
-
-    - name: Check SOA-EDIT-API metadata for domains
-      ansible.builtin.shell: pdnsutil get-meta "{{ item }}" SOA-EDIT-API | grep -c "INCREMENT" || echo "0"
-      loop: "{{ powerdns[env].zones }}"
-      register: soa_check
-      changed_when: false
       when: pdns_role == 'master'
 
     - name: Configure SOA-EDIT-API for certbot compatibility
-      ansible.builtin.command: pdnsutil set-meta "{{ item }}" SOA-EDIT-API INCREMENT
+      ansible.builtin.shell: |
+        if ! pdnsutil get-meta "{{ item }}" SOA-EDIT-API | grep -q "INCREMENT"; then
+          pdnsutil set-meta "{{ item }}" SOA-EDIT-API INCREMENT
+        fi
       loop: "{{ powerdns[env].zones }}"
-      when: pdns_role == 'master' and soa_check.results[ansible_loop.index0].stdout == "0"
+      when: pdns_role == 'master'
 
     # Scripts directory setup
     - name: Ensure /opt/pdns/scripts directory exists
