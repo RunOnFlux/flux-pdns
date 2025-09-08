@@ -149,15 +149,28 @@
       vars:
         subdomain: "{{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}"
 
-    - name: Make sure the start script is executable
-      file:
-        path: /opt/healthchecker/src/start.sh
-        mode: "0755"
+    - name: Install npm dependencies for healthchecker
+      npm:
+        path: /opt/healthchecker/src
+        state: present
 
-    - name: Start the application
-      command: /opt/healthchecker/src/start.sh
-      args:
-        chdir: /opt/healthchecker/src
+    - name: Create systemd service for healthchecker
+      ansible.builtin.template:
+        src: templates/healthchecker.service.j2
+        dest: /etc/systemd/system/healthchecker.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Reload systemd daemon
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: Start and enable healthchecker service
+      ansible.builtin.systemd:
+        name: healthchecker
+        state: started
+        enabled: yes
 
     # PowerDNS configuration
     - name: Create PowerDNS zones directory
@@ -194,15 +207,32 @@
         group: root
         mode: "0700"
 
-    - name: Generate TSIG key for zone transfers (master servers only)
-      ansible.builtin.shell:
-        cmd: pdnsutil generate-tsig-key zone-transfer hmac-sha256 > /etc/powerdns/tsig-keys/zone-transfer.conf
-        creates: /etc/powerdns/tsig-keys/zone-transfer.conf
-      when: pdns_role|default('slave') == 'master'
+    - name: Set environment for TSIG key selection
+      ansible.builtin.set_fact:
+        env: "{{ 'staging' if DEPLOY_ENV == 'staging' else 'production' }}"
+
+    - name: Generate TSIG key for zone transfers if not set
+      ansible.builtin.set_fact:
+        tsig: "{{ tsig | default({}) | combine({env: {'zone_transfer_key': lookup('pipe', 'openssl rand -base64 48')}}, recursive=True) }}"
+      when: tsig[env].zone_transfer_key | default('') in ['', 'REPLACE_WITH_STAGING_KEY', 'REPLACE_WITH_PRODUCTION_KEY']
+      run_once: true
+
+    - name: Deploy TSIG key for zone transfers (all servers)
+      ansible.builtin.template:
+        src: templates/tsig-zone-transfer.key.j2
+        dest: /etc/powerdns/tsig-keys/zone-transfer.conf
+        owner: root
+        group: root
+        mode: "0600"
 
     - name: Generate TSIG key for ACME challenges (master servers only)
       ansible.builtin.shell:
-        cmd: pdnsutil generate-tsig-key certbot-{{ 'dev' if DEPLOY_ENV == 'staging' else 'prod' }} hmac-sha256 > /etc/powerdns/tsig-keys/certbot.conf
+        cmd: |
+          KEY=$(openssl rand -base64 48)
+          echo "key \"certbot-{{ 'dev' if DEPLOY_ENV == 'staging' else 'prod' }}\" {" > /etc/powerdns/tsig-keys/certbot.conf
+          echo "  algorithm hmac-sha256;" >> /etc/powerdns/tsig-keys/certbot.conf
+          echo "  secret \"${KEY}\";" >> /etc/powerdns/tsig-keys/certbot.conf
+          echo "};" >> /etc/powerdns/tsig-keys/certbot.conf
         creates: /etc/powerdns/tsig-keys/certbot.conf
       when: pdns_role|default('slave') == 'master'
 

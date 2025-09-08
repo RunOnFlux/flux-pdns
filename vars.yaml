@@ -16,3 +16,11 @@ maxmind:
 
 # Common settings
 pdns_auth_version: "49"
+
+# TSIG keys for zone transfers (generate with: openssl rand -base64 48)
+# These keys must be the same on all servers in each respective environment
+tsig:
+  staging:
+    zone_transfer_key: "REPLACE_WITH_STAGING_KEY"
+  production:
+    zone_transfer_key: "REPLACE_WITH_PRODUCTION_KEY"

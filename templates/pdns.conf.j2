@@ -65,7 +65,19 @@ secondary=no
   {% endif %}
 {% endfor %}
 
-allow-axfr-ips=127.0.0.1,{{ slave_ips | join(',') }}
+# Configure TSIG for zone transfers
+# When TSIG is configured, allow-axfr-ips is ignored for TSIG-authenticated requests
+# We keep localhost for debugging without TSIG
+allow-axfr-ips=127.0.0.1
+
+# Configure which zones can be transferred with TSIG
+{% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
+{% set zones = powerdns[env].zones %}
+{% for zone in zones %}
+tsig-allow-axfr.{{ zone }}=zone-transfer
+{% endfor %}
+
+# Notify slaves when zones change
 also-notify={{ slave_ips | join(',') }}
 
 # Enable DNS updates for ACME challenges
@@ -76,9 +88,11 @@ allow-dnsupdate-from=127.0.0.1
 # Slave server configuration
 primary=no
 secondary=yes
-primary-config-file=/etc/powerdns/primary.conf
+slave-renotify=yes
+
+# Only localhost can query AXFR (TSIG required for remote)
 allow-axfr-ips=127.0.0.1
 {% endif %}
 
-# TSIG keys for secure zone transfers and DNS updates
+# TSIG keys for secure zone transfers
 include-dir=/etc/powerdns/tsig-keys

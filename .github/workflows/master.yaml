@@ -40,9 +40,13 @@ jobs:
           DEPLOY_ENV: ${{ github.event_name == 'release' && 'production' || 'staging' }}
           MAXMIND_ACCOUNT_ID: ${{ secrets.MAXMIND_ACCOUNT_ID }}
           MAXMIND_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
+          TSIG_STAGING_KEY: ${{ secrets.TSIG_STAGING_KEY }}
+          TSIG_PRODUCTION_KEY: ${{ secrets.TSIG_PRODUCTION_KEY }}
         run: |
           ansible-playbook -i hosts.yaml \
             -e "DEPLOY_ENV=$DEPLOY_ENV" \
             -e "maxmind.account_id=$MAXMIND_ACCOUNT_ID" \
             -e "maxmind.license_key=$MAXMIND_LICENSE_KEY" \
+            -e "tsig.staging.zone_transfer_key=$TSIG_STAGING_KEY" \
+            -e "tsig.production.zone_transfer_key=$TSIG_PRODUCTION_KEY" \
             powerdns_setup.yaml
