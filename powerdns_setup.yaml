@@ -303,14 +303,30 @@
 
     - name: Configure TSIG metadata for domains
       ansible.builtin.shell: |
-        pdnsutil set-meta "{{ item }}" TSIG-ALLOW-AXFR zone-transfer
+        current=$(pdnsutil get-meta "{{ item }}" TSIG-ALLOW-AXFR 2>/dev/null || echo "")
+        if [[ "$current" != *"zone-transfer"* ]]; then
+          pdnsutil set-meta "{{ item }}" TSIG-ALLOW-AXFR zone-transfer
+          echo "CHANGED"
+        else
+          echo "ALREADY_SET"
+        fi
       loop: "{{ powerdns[env].zones }}"
-      when: pdns_role|default('slave') == 'master' and "'zone-transfer' not in tsig_key_exists.stdout"
+      register: tsig_meta_result
+      changed_when: "'CHANGED' in tsig_meta_result.stdout"
+      when: pdns_role|default('slave') == 'master'
 
     - name: Configure SOA-EDIT-API for certbot compatibility
       ansible.builtin.shell: |
-        pdnsutil set-meta "{{ item }}" SOA-EDIT-API INCEPTION-INCREMENT
+        current=$(pdnsutil get-meta "{{ item }}" SOA-EDIT-API 2>/dev/null || echo "")
+        if [ "$current" != "INCEPTION-INCREMENT" ]; then
+          pdnsutil set-meta "{{ item }}" SOA-EDIT-API INCEPTION-INCREMENT
+          echo "CHANGED"
+        else
+          echo "ALREADY_SET"
+        fi
       loop: "{{ powerdns[env].zones }}"
+      register: soa_edit_result
+      changed_when: "'CHANGED' in soa_edit_result.stdout"
       when: pdns_role|default('slave') == 'master'
 
     # Scripts directory setup
