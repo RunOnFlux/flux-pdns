@@ -1,12 +1,12 @@
 # PowerDNS Configuration with Geo-routing and Lua Records
 # This configuration enables both the pipe backend and Lua records for geo-routing
 
-# Primary backend - Bind backend for all zones, plus GeoIP for Lua Records
-launch=bind,geoip
+# Primary backend - SQLite3 backend for all zones, plus GeoIP for Lua Records
+launch=gsqlite3,geoip
 
-# Bind backend configuration for all zones
-bind-config=/etc/powerdns/named.conf
-bind-check-interval=60
+# SQLite3 backend configuration
+gsqlite3-database=/var/lib/powerdns/pdns.sqlite3
+gsqlite3-dnssec=yes
 
 # Enable Lua records for geo-routing
 enable-lua-records=yes

@@ -52,7 +52,7 @@
       ansible.builtin.package:
         name:
           - pdns-server
-          - pdns-backend-bind
+          - pdns-backend-sqlite3
           - pdns-backend-geoip
           - python3
           - logrotate
@@ -62,6 +62,7 @@
           - libmaxminddb0
           - mmdb-bin
           - geoipupdate
+          - sqlite3
         state: present
 
     - name: register state of /etc/apt/sources.list.d/nodesource.list
@@ -190,7 +191,28 @@
         mode: "0644"
         backup: yes
 
-    - name: Template named.conf for bind backend
+    # SQLite3 backend database setup
+    - name: Create PowerDNS database directory
+      ansible.builtin.file:
+        path: /var/lib/powerdns
+        state: directory
+        owner: pdns
+        group: pdns
+        mode: "0755"
+
+    - name: Check if PowerDNS database exists
+      ansible.builtin.stat:
+        path: /var/lib/powerdns/pdns.sqlite3
+      register: pdns_db_stat
+
+    - name: Initialize PowerDNS SQLite schema
+      ansible.builtin.shell: |
+        sqlite3 /var/lib/powerdns/pdns.sqlite3 < /usr/share/pdns-backend-sqlite3/schema/schema.sqlite3.sql
+        chown pdns:pdns /var/lib/powerdns/pdns.sqlite3
+        chmod 640 /var/lib/powerdns/pdns.sqlite3
+      when: not pdns_db_stat.stat.exists
+
+    - name: Template named.conf for zone2sql conversion
       ansible.builtin.template:
         src: templates/named.conf.j2
         dest: /etc/powerdns/named.conf
@@ -198,14 +220,8 @@
         group: root
         mode: "0644"
 
-    # Master/Slave replication setup
-    - name: Create TSIG keys directory
-      ansible.builtin.file:
-        path: /etc/powerdns/tsig-keys
-        state: directory
-        owner: pdns
-        group: pdns
-        mode: "0700"
+    # Master/Slave replication setup with SQLite3 backend
+    # TSIG keys are now stored in the database, not in separate files
 
     - name: Set environment for TSIG key selection
       ansible.builtin.set_fact:
@@ -217,24 +233,8 @@
       when: tsig[env].zone_transfer_key | default('') in ['', 'REPLACE_WITH_STAGING_KEY', 'REPLACE_WITH_PRODUCTION_KEY']
       run_once: true
 
-    - name: Deploy TSIG key for zone transfers (all servers)
-      ansible.builtin.template:
-        src: templates/tsig-zone-transfer.key.j2
-        dest: /etc/powerdns/tsig-keys/zone-transfer.conf
-        owner: pdns
-        group: pdns
-        mode: "0600"
-
-
-
-    - name: Copy primary.conf for slave servers
-      ansible.builtin.template:
-        src: templates/primary.conf.j2
-        dest: /etc/powerdns/primary.conf
-        owner: root
-        group: root
-        mode: "0644"
-      when: pdns_role|default('slave') == 'slave'
+    # TSIG keys are now managed through SQLite3 backend via pdnsutil
+    # The old file-based TSIG configuration is no longer needed
 
     - name: Copy zone file for geo-routing (production)
       ansible.builtin.copy:
@@ -271,6 +271,41 @@
         group: root
         mode: "0644"
       when: DEPLOY_ENV == 'staging'
+
+    # Zone migration from BIND to SQLite3 using zone2sql
+    - name: Check if zones are already imported
+      ansible.builtin.shell: |
+        sqlite3 /var/lib/powerdns/pdns.sqlite3 "SELECT COUNT(*) FROM domains;"
+      register: zone_count
+      changed_when: false
+
+    - name: Import zones from BIND files to SQLite database
+      ansible.builtin.shell: |
+        zone2sql --named-conf=/etc/powerdns/named.conf --gsqlite | sqlite3 /var/lib/powerdns/pdns.sqlite3
+      when: zone_count.stdout | int == 0
+
+    - name: Optimize database after zone import
+      ansible.builtin.shell: |
+        echo "ANALYZE;" | sqlite3 /var/lib/powerdns/pdns.sqlite3
+      when: zone_count.stdout | int == 0
+
+    # TSIG key configuration for SQLite3 backend
+    - name: Check if TSIG key exists
+      ansible.builtin.shell: |
+        pdnsutil list-tsig-keys | grep "zone-transfer" || true
+      register: tsig_key_exists
+      changed_when: false
+
+    - name: Import TSIG key for zone transfers
+      ansible.builtin.shell: |
+        pdnsutil import-tsig-key zone-transfer hmac-sha256 "{{ powerdns[env].tsig_zone_transfer_key }}"
+      when: "'zone-transfer' not in tsig_key_exists.stdout"
+
+    - name: Configure TSIG metadata for domains
+      ansible.builtin.shell: |
+        pdnsutil set-meta "{{ item }}" TSIG-ALLOW-AXFR zone-transfer
+      loop: "{{ powerdns[env].zones }}"
+      when: pdns_role|default('slave') == 'master' and "'zone-transfer' not in tsig_key_exists.stdout"
 
     # Scripts directory setup
     - name: Ensure /opt/pdns/scripts directory exists
@@ -373,11 +408,11 @@
       changed_when: false
       when: pdns_role|default('slave') == 'slave'
 
-    - name: Validate TSIG keys exist on master servers
+    - name: Validate PowerDNS database exists and is accessible
       ansible.builtin.stat:
-        path: /etc/powerdns/tsig-keys/certbot.conf
-      register: tsig_key_check
-      failed_when: not tsig_key_check.stat.exists
+        path: /var/lib/powerdns/pdns.sqlite3
+      register: pdns_db_check
+      failed_when: not pdns_db_check.stat.exists
       when: pdns_role|default('slave') == 'master'
 
     - name: Test DNS update capability on master servers
