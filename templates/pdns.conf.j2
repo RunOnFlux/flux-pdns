@@ -87,5 +87,5 @@ slave-renotify=yes
 allow-axfr-ips=127.0.0.1
 {% endif %}
 
-# TSIG keys for secure zone transfers
-include-dir=/etc/powerdns/tsig-keys
+# TSIG keys are defined in the bind configuration (named.conf)
+# No need to include them in PowerDNS config

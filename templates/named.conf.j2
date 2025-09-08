@@ -4,11 +4,14 @@
 // IMPORTANT: This uses PowerDNS bind backend syntax, not standard BIND9 syntax
 // Security is handled at the PowerDNS level in pdns.conf, not here
 
+// Include TSIG key for zone transfers
+{% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
+include "/etc/powerdns/tsig-keys/zone-transfer.conf";
+
 options {
     directory "/etc/powerdns/zones";
 };
 
-{% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
 {% set zones = powerdns[env].zones %}
 
 // Configure zones dynamically based on environment
@@ -16,6 +19,9 @@ options {
 zone "{{ zone }}" {
     type master;
     file "/etc/powerdns/zones/{{ zone }}.zone";
+    {% if pdns_role|default('slave') == 'master' %}
+    allow-transfer { key zone-transfer; };
+    {% endif %}
 };
 
 {% endfor %}
