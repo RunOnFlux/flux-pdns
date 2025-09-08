@@ -70,12 +70,8 @@ secondary=no
 # We keep localhost for debugging without TSIG
 allow-axfr-ips=127.0.0.1
 
-# Configure which zones can be transferred with TSIG
-{% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
-{% set zones = powerdns[env].zones %}
-{% for zone in zones %}
-tsig-allow-axfr.{{ zone }}=zone-transfer
-{% endfor %}
+# Allow AXFR with TSIG key "zone-transfer" for all zones
+tsig-allow-axfr=zone-transfer
 
 # Notify slaves when zones change
 also-notify={{ slave_ips | join(',') }}
