@@ -35,10 +35,13 @@ webserver-address=127.0.0.1
 webserver-port=8081
 api=yes
 {% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
-api-key={{ pdns_api[env].key }}
+api-key={{ powerdns[env].api_key }}
 
 # DNSSEC settings - prevent DNSSEC key responses to avoid REFUSED responses
 direct-dnskey=no
+
+# SOA editing for API updates - use INCEPTION-INCREMENT for proper date-based serials
+default-soa-edit=INCEPTION-INCREMENT
 
 # Network settings
 local-address=0.0.0.0
@@ -55,19 +58,12 @@ max-queue-length=5000
 
 # Master/Slave replication settings
 {% set server_role = pdns_role | default('slave') %}
+{% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
 
 {% if server_role == 'master' %}
 # Master server configuration
 primary=yes
 secondary=no
-
-# Collect slave IPs from inventory
-{% set slave_ips = [] %}
-{% for host in groups[group_names[0]] %}
-  {% if hostvars[host].pdns_role == 'slave' %}
-    {% set _ = slave_ips.append(hostvars[host].ansible_host) %}
-  {% endif %}
-{% endfor %}
 
 # Configure TSIG for zone transfers
 # TSIG keys are loaded from the bind configuration and key files
@@ -75,7 +71,7 @@ secondary=no
 allow-axfr-ips=127.0.0.1
 
 # Notify slaves when zones change
-also-notify={{ slave_ips | join(',') }}
+also-notify={{ powerdns[env].slave_ips | join(',') }}
 
 # Enable DNS updates for ACME challenges
 dnsupdate=yes

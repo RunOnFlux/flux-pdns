@@ -49,8 +49,8 @@ jobs:
             -e "DEPLOY_ENV=$DEPLOY_ENV" \
             -e "maxmind.account_id=$MAXMIND_ACCOUNT_ID" \
             -e "maxmind.license_key=$MAXMIND_LICENSE_KEY" \
-            -e "tsig.staging.zone_transfer_key=$TSIG_STAGING_ZONE_TRANSFER_KEY" \
-            -e "tsig.production.zone_transfer_key=$TSIG_PRODUCTION_ZONE_TRANSFER_KEY" \
-            -e "pdns_api.staging.key=$PDNS_API_STAGING_KEY" \
-            -e "pdns_api.production.key=$PDNS_API_PRODUCTION_KEY" \
+            -e "powerdns.staging.tsig_zone_transfer_key=$TSIG_STAGING_ZONE_TRANSFER_KEY" \
+            -e "powerdns.production.tsig_zone_transfer_key=$TSIG_PRODUCTION_ZONE_TRANSFER_KEY" \
+            -e "powerdns.staging.api_key=$PDNS_API_STAGING_KEY" \
+            -e "powerdns.production.api_key=$PDNS_API_PRODUCTION_KEY" \
             powerdns_setup.yaml

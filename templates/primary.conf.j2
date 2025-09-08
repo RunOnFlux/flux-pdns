@@ -3,15 +3,7 @@
 
 {% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
 {% set zones = powerdns[env].zones %}
-
-# Get master server IP from current group
-{% set master_ip = None %}
-{% for host in groups[group_names[0]] %}
-  {% if hostvars[host].pdns_role == 'master' %}
-    {% set master_ip = hostvars[host].ansible_host %}
-    {% break %}
-  {% endif %}
-{% endfor %}
+{% set master_ip = powerdns[env].master_ip %}
 
 # Configure zones from master server with TSIG authentication
 {% for zone in zones %}
@@ -20,7 +12,7 @@
 type=slave
 master={{ master_ip }}:53
 tsig-algo=hmac-sha256
-tsig-secret={{ tsig[env].zone_transfer_key }}
+tsig-secret={{ powerdns[env].tsig_zone_transfer_key }}
 tsig-name=zone-transfer
 
 {% endfor %}

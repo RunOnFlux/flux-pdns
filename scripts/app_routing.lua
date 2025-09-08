@@ -155,9 +155,9 @@ function appRouteSoa(qname)
     -- Return SOA record matching the zone files
     local env = getEnvironment(qname)
     if env == "staging" then
-        return "pdns2.runonflux.io hostmaster.runonflux.io 2025090401 3600 600 86400 3600"
+        return "pdns2.runonflux.io hostmaster.runonflux.io 2025090801 3600 600 86400 3600"
     else
-        return "pdns1.runonflux.io hostmaster.runonflux.io 2025090401 3600 600 86400 3600"
+        return "pdns1.runonflux.io hostmaster.runonflux.io 2025090801 3600 600 86400 3600"
     end
 end
 

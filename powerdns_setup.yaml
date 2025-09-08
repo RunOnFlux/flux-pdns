@@ -25,7 +25,7 @@
 
     - name: Add PowerDNS repository
       ansible.builtin.apt_repository:
-        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/powerdns.gpg] http://repo.powerdns.com/ubuntu {{ ansible_distribution_release }}-auth-{{ pdns_auth_version }} main"
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/powerdns.gpg] http://repo.powerdns.com/ubuntu {{ ansible_distribution_release }}-auth-{{ powerdns.auth_version }} main"
         state: present
         filename: powerdns
 
@@ -385,6 +385,7 @@
       register: key_list_test
       changed_when: false
       when: pdns_role|default('slave') == 'master'
+
 
     - name: Test DNS resolution for app routing (staging)
       command: dig @127.0.0.1 test.app2.runonflux.io CNAME +short

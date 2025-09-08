@@ -13,14 +13,14 @@ app2:
 
 app:
   hosts:
-    pdns-prod-us1:
-      ansible_host: 5.161.203.77
-      ansible_user: root
-      pdns_role: slave
     pdns-prod-fn1:
       ansible_host: 10.100.0.153
       ansible_user: root
       pdns_role: master
+    pdns-prod-us1:
+      ansible_host: 5.161.203.77
+      ansible_user: root
+      pdns_role: slave
     pdns-prod-sg1:
       ansible_host: 178.128.30.247
       ansible_user: root
