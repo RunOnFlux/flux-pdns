@@ -279,10 +279,17 @@
       register: zone_count
       changed_when: false
 
-    - name: Import zones from BIND files to SQLite database
+    - name: Import zones from BIND files to SQLite database (master only)
       ansible.builtin.shell: |
         zone2sql --named-conf=/etc/powerdns/named.conf --gsqlite | sqlite3 /var/lib/powerdns/pdns.sqlite3
-      when: zone_count.stdout | int == 0
+      when: zone_count.stdout | int == 0 and pdns_role == 'master'
+
+    - name: Create secondary zones on slave servers
+      ansible.builtin.shell: |
+        pdnsutil create-secondary-zone {{ item }} {{ powerdns[env].master_ip }}
+        pdnsutil activate-tsig-key {{ item }} zone-transfer secondary
+      loop: "{{ powerdns[env].zones }}"
+      when: pdns_role == 'slave' and zone_count.stdout | int == 0
 
     - name: Optimize database after zone import and fixes
       ansible.builtin.shell: |
