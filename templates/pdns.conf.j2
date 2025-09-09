@@ -30,6 +30,7 @@ log-dns-queries=yes
 log-dns-details=yes
 
 {% set server_role = pdns_role | default('slave') %}
+{% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
 {% if server_role == 'master' %}
 # Security settings - Enable API for certbot
 webserver=yes
@@ -37,7 +38,6 @@ webserver-address={{ powerdns[env].http_api_ip }}
 webserver-port=8081
 webserver-allow-from=127.0.0.1,{{ powerdns.cert_server_ip }}
 api=yes
-{% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
 api-key={{ powerdns[env].api_key }}
 {% else %}
 # Secondary server - no webserver/API needed
