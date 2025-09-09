@@ -427,7 +427,7 @@
 
     # Master/Slave replication validation
     - name: Test zone transfer from master (slave servers only)
-      command: dig @{{ ansible_default_ipv4.address }} {{ 'cdn-geodev.runonflux.io' if DEPLOY_ENV == 'staging' else 'cdn-geo.runonflux.io' }} AXFR
+      command: dig @{{ powerdns[env].master_ip }} {{ 'cdn-geodev.runonflux.io' if DEPLOY_ENV == 'staging' else 'cdn-geo.runonflux.io' }} AXFR
       register: axfr_test
       retries: 3
       delay: 10
