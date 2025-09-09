@@ -29,6 +29,11 @@
         state: present
         filename: powerdns
 
+    - name: Remove old PowerDNS repository file
+      ansible.builtin.file:
+        path: /etc/apt/sources.list.d/repo_powerdns_com_ubuntu.list
+        state: absent
+
     - name: Update apt cache
       ansible.builtin.apt:
         update_cache: yes
@@ -401,6 +406,13 @@
         regexp: "^DEPLOY_ENV="
         line: "DEPLOY_ENV={{ DEPLOY_ENV }}"
         state: present
+
+    - name: Allow PowerDNS API access from cert server
+      ansible.builtin.shell: |
+        if ! ufw status numbered | grep -q "{{ powerdns.cert_server_ip }}.*{{ powerdns[env].http_api_ip }}.*8081"; then
+          ufw allow from {{ powerdns.cert_server_ip }} to {{ powerdns[env].http_api_ip }} port 8081 proto tcp comment 'PowerDNS API from cert server'
+        fi
+      when: pdns_role == 'master'
 
     # Service management
     - name: Validate PowerDNS configuration

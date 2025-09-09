@@ -10,6 +10,7 @@ powerdns:
     master_ip: "5.39.57.39"
     slave_ips:
       - "5.161.41.40"
+    http_api_ip: "10.100.0.154"
     # TSIG key for zone transfers (generate with: openssl rand -base64 48)
     tsig_zone_transfer_key: "REPLACE_WITH_STAGING_ZONE_TRANSFER_KEY"
     # API key for certbot (generate with: openssl rand -base64 32)
@@ -23,6 +24,7 @@ powerdns:
     slave_ips:
       - "5.161.203.77"
       - "178.128.30.247"
+    http_api_ip: "10.100.0.153"
     # TSIG key for zone transfers (generate with: openssl rand -base64 48)
     tsig_zone_transfer_key: "REPLACE_WITH_PRODUCTION_ZONE_TRANSFER_KEY"
     # API key for certbot (generate with: openssl rand -base64 32)
