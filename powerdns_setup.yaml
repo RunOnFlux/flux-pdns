@@ -318,6 +318,14 @@
       loop: "{{ powerdns[env].zones }}"
       when: pdns_role == 'master'
 
+    - name: Configure TSIG for NOTIFY packets
+      ansible.builtin.shell: |
+        if ! pdnsutil get-meta "{{ item }}" NOTIFY-DNSUPDATE | grep -q "zone-transfer"; then
+          pdnsutil set-meta "{{ item }}" NOTIFY-DNSUPDATE zone-transfer
+        fi
+      loop: "{{ powerdns[env].zones }}"
+      when: pdns_role == 'master'
+
     - name: Configure SOA-EDIT for serial increments
       ansible.builtin.shell: |
         if ! pdnsutil get-meta "{{ item }}" SOA-EDIT | grep -q "INCEPTION-INCREMENT"; then
