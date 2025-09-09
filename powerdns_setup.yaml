@@ -342,6 +342,14 @@
       loop: "{{ powerdns[env].zones }}"
       when: pdns_role == 'master'
 
+    - name: Set zone kind to MASTER for automatic NOTIFY
+      ansible.builtin.shell: |
+        if ! pdnsutil show-zone "{{ item }}" | grep -q "This is a Master zone"; then
+          pdnsutil set-kind "{{ item }}" MASTER
+        fi
+      loop: "{{ powerdns[env].zones }}"
+      when: pdns_role == 'master'
+
     # Scripts directory setup
     - name: Ensure /opt/pdns/scripts directory exists
       ansible.builtin.file:
