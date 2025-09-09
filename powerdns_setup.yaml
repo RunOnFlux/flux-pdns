@@ -326,6 +326,14 @@
       loop: "{{ powerdns[env].zones }}"
       when: pdns_role == 'master'
 
+    - name: Configure ALSO-NOTIFY for zone-level notifications
+      ansible.builtin.shell: |
+        if ! pdnsutil get-meta "{{ item }}" ALSO-NOTIFY | grep -q "{{ powerdns[env].slave_ips | join(',') }}"; then
+          pdnsutil set-meta "{{ item }}" ALSO-NOTIFY {{ powerdns[env].slave_ips | join(',') }}
+        fi
+      loop: "{{ powerdns[env].zones }}"
+      when: pdns_role == 'master'
+
     - name: Configure SOA-EDIT for serial increments
       ansible.builtin.shell: |
         if ! pdnsutil get-meta "{{ item }}" SOA-EDIT | grep -q "INCEPTION-INCREMENT"; then
