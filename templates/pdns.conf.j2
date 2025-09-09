@@ -83,9 +83,6 @@ allow-dnsupdate-from=127.0.0.1
 primary=no
 secondary=yes
 secondary-do-renotify=no
-
-# Only localhost can query AXFR (TSIG required for remote)
-allow-axfr-ips=127.0.0.1
 {% endif %}
 
 # TSIG keys are defined in the bind configuration (named.conf)
