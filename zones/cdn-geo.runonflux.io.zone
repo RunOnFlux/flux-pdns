@@ -6,7 +6,7 @@ $ORIGIN cdn-geo.runonflux.io.
 
 ; SOA record for this specific subdomain
 @       IN      SOA     pdns1.runonflux.io. hostmaster.runonflux.io. (
-                        2025090801      ; Serial (YYYYMMDD01, auto-managed by PowerDNS)
+                        2025090900      ; Serial (YYYYMMDD00, auto-managed by PowerDNS)
                         3600            ; Refresh
                         600             ; Retry
                         86400           ; Expire

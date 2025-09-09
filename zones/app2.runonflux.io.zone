@@ -6,7 +6,7 @@ $ORIGIN app2.runonflux.io.
 
 ; SOA record for app2 subdomain (staging)
 @       IN      SOA     pdns2.runonflux.io. hostmaster.runonflux.io. (
-                        2025090801      ; Serial (YYYYMMDD01, auto-managed by PowerDNS)
+                        2025090900      ; Serial (YYYYMMDD00, auto-managed by PowerDNS)
                         3600            ; Refresh
                         600             ; Retry
                         86400           ; Expire
