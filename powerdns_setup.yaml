@@ -34,9 +34,11 @@
         update_cache: yes
         cache_valid_time: 86400
 
-    - name: Copy Resolve configuration file
+    - name: Configure DNS resolution
       ansible.builtin.copy:
-        src: resolv.conf
+        content: |
+          nameserver 8.8.8.8
+          nameserver 8.8.4.4
         dest: /etc/resolv.conf
         owner: root
         group: root
@@ -156,8 +158,8 @@
         state: present
 
     - name: Create systemd service for healthchecker
-      ansible.builtin.template:
-        src: templates/healthchecker.service.j2
+      ansible.builtin.copy:
+        src: files/healthchecker.service
         dest: /etc/systemd/system/healthchecker.service
         owner: root
         group: root
@@ -363,7 +365,7 @@
     # Logrotate configuration
     - name: Copy PowerDNS logrotate configuration
       ansible.builtin.copy:
-        src: pdns_logrotate.conf
+        src: files/pdns_logrotate.conf
         dest: /etc/logrotate.d/pdns
         owner: root
         group: root
