@@ -33,6 +33,7 @@ log-dns-details=yes
 webserver=yes
 webserver-address=127.0.0.1
 webserver-port=8081
+webserver-allow-from=127.0.0.1,{{ powerdns.cert_server_ip }}
 api=yes
 {% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
 api-key={{ powerdns[env].api_key }}

@@ -1,6 +1,7 @@
 # PowerDNS Configuration Variables
 powerdns:
   auth_version: "49"
+  cert_server_ip: "10.100.0.172"
 
   staging:
     zones:
