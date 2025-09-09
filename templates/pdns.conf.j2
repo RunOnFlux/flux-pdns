@@ -29,6 +29,7 @@ loglevel=5
 log-dns-queries=yes
 log-dns-details=yes
 
+{% if server_role == 'master' %}
 # Security settings - Enable API for certbot
 webserver=yes
 webserver-address=127.0.0.1
@@ -37,6 +38,11 @@ webserver-allow-from=127.0.0.1,{{ powerdns.cert_server_ip }}
 api=yes
 {% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
 api-key={{ powerdns[env].api_key }}
+{% else %}
+# Secondary server - no webserver/API needed
+webserver=no
+api=no
+{% endif %}
 
 # DNSSEC settings - prevent DNSSEC key responses to avoid REFUSED responses
 direct-dnskey=no
