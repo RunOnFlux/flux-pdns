@@ -13,7 +13,7 @@ $ORIGIN app.runonflux.io.
                         3600 )          ; Minimum TTL
 
 ; Name servers for this subdomain
-                IN      NS      pdns1.runonflux.io.
+@               IN      NS      pdns1.runonflux.io.
 
 ; Load Lua functions once in a config record
 _config         IN      LUA     LUA     "dofile('/opt/pdns/scripts/app_routing.lua')"

@@ -13,7 +13,7 @@ $ORIGIN cdn-geodev.runonflux.io.
                         300 )           ; Minimum TTL
 
 ; Name servers for this subdomain
-                IN      NS      pdns2.runonflux.io.
+@               IN      NS      pdns2.runonflux.io.
 
 ; Load Lua functions once in a config record
 _config         IN      LUA     LUA     "dofile('/opt/pdns/scripts/geo_routing.lua')"

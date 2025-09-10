@@ -1,0 +1,40 @@
+---
+# Optional playbook for generating zone files from templates
+# Usage: ansible-playbook generate_zones.yaml -e "generate_zones=true"
+- name: Generate PowerDNS zone files from templates
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - vars.yaml
+  vars:
+    zones_to_generate:
+      - { name: "cdn-geo.runonflux.io", type: "geo", env: "production" }
+      - { name: "cdn-geodev.runonflux.io", type: "geo", env: "staging" }
+      - { name: "app.runonflux.io", type: "app", env: "production" }
+      - { name: "app2.runonflux.io", type: "app", env: "staging" }
+  
+  tasks:
+    - name: Check if zone generation is requested
+      ansible.builtin.debug:
+        msg: "Zone generation not requested. Use -e 'generate_zones=true' to generate zones."
+      when: generate_zones is not defined or not generate_zones
+
+    - name: Install required Python packages
+      ansible.builtin.pip:
+        name:
+          - jinja2
+          - pyyaml
+      when: generate_zones | default(false)
+
+    - name: Generate zone files from template
+      ansible.builtin.command:
+        cmd: python3 scripts/generate_zone.py {{ item.name }} {{ item.env }} {{ item.type }} -o zones/
+        chdir: "{{ playbook_dir }}"
+      loop: "{{ zones_to_generate }}"
+      when: generate_zones | default(false)
+      register: zone_generation
+
+    - name: Show generated zone files
+      ansible.builtin.debug:
+        var: zone_generation
+      when: generate_zones | default(false)

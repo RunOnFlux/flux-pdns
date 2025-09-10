@@ -1,0 +1,3 @@
+# Python dependencies for PowerDNS zone template system
+pyyaml>=6.0
+jinja2>=3.1
