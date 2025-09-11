@@ -308,10 +308,19 @@
       changed_when: false
 
     - name: Generate fresh zone files for import
-      command: python scripts/generate_zone.py {{ item.domain }} {{ DEPLOY_ENV }} {{ item.type }} -o zones/
+      template:
+        src: zone.template.j2
+        dest: "zones/{{ item.domain }}.zone"
+        owner: root
+        group: root
+        mode: "0644"
+      vars: "{{ powerdns[env].zone_template_vars[item.type] | combine(powerdns[env] | combine({
+        'zone_name': item.domain,
+        'environment': DEPLOY_ENV,
+        'serial': ansible_date_time.date | regex_replace('-', '') + '00'
+      })) }}"
       loop: "{{ powerdns[env].zone_configs }}"
       when: zone_count.stdout | int == 0 and pdns_role == 'master'
-      changed_when: true
 
     - name: Import zones from BIND files to SQLite database (master only)
       ansible.builtin.shell: |
