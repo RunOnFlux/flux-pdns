@@ -30,15 +30,16 @@
       ansible.builtin.set_fact:
         env: "{{ 'staging' if DEPLOY_ENV == 'staging' else 'production' }}"
 
-    - name: Set derived host IPs
+    - name: Initialize host IP variables
+      ansible.builtin.set_fact:
+        master_ip: ""
+        slave_ips: []
+
+    - name: Set derived master IP
       ansible.builtin.set_fact:
         master_ip: "{{ hostvars[item]['public_ip'] | default(hostvars[item]['ansible_host']) }}"
       loop: "{{ groups[group_names[0]] }}"
       when: hostvars[item]['pdns_role'] == 'master'
-
-    - name: Initialize slave IPs list
-      ansible.builtin.set_fact:
-        slave_ips: []
 
     - name: Set derived slave IPs
       ansible.builtin.set_fact:
