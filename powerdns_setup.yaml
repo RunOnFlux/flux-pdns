@@ -36,9 +36,13 @@
       loop: "{{ groups[group_names[0]] }}"
       when: hostvars[item]['pdns_role'] == 'master'
 
+    - name: Initialize slave IPs list
+      ansible.builtin.set_fact:
+        slave_ips: []
+
     - name: Set derived slave IPs
       ansible.builtin.set_fact:
-        slave_ips: "{{ slave_ips | default([]) + [hostvars[item]['public_ip'] | default(hostvars[item]['ansible_host'])] }}"
+        slave_ips: "{{ slave_ips + [hostvars[item]['public_ip'] | default(hostvars[item]['ansible_host'])] }}"
       loop: "{{ groups[group_names[0]] }}"
       when: hostvars[item]['pdns_role'] == 'slave'
 
