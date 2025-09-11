@@ -7,6 +7,9 @@ powerdns:
     zones:
       - cdn-geodev.runonflux.io
       - app2.runonflux.io
+    zone_configs:
+      - { domain: "cdn-geodev.runonflux.io", type: "geo" }
+      - { domain: "app2.runonflux.io", type: "app" }
     master_ip: "5.39.57.39"
     slave_ips:
       - "5.161.41.40"
@@ -20,6 +23,9 @@ powerdns:
     zones:
       - cdn-geo.runonflux.io
       - app.runonflux.io
+    zone_configs:
+      - { domain: "cdn-geo.runonflux.io", type: "geo" }
+      - { domain: "app.runonflux.io", type: "app" }
     master_ip: "5.39.57.38"
     slave_ips:
       - "5.161.203.77"

@@ -307,6 +307,12 @@
       register: zone_count
       changed_when: false
 
+    - name: Generate fresh zone files for import
+      command: python scripts/generate_zone.py {{ item.domain }} {{ DEPLOY_ENV }} {{ item.type }} -o zones/
+      loop: "{{ powerdns[env].zone_configs }}"
+      when: zone_count.stdout | int == 0 and pdns_role == 'master'
+      changed_when: true
+
     - name: Import zones from BIND files to SQLite database (master only)
       ansible.builtin.shell: |
         zone2sql --named-conf=/etc/powerdns/named.conf --gsqlite | sqlite3 /var/lib/powerdns/pdns.sqlite3
