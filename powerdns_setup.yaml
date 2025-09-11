@@ -217,8 +217,8 @@
         owner: root
         group: root
         mode: "0644"
-      notify: restart pdns
         backup: yes
+      notify: restart pdns
 
     # SQLite3 backend database setup
     - name: Create PowerDNS database directory
