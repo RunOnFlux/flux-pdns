@@ -7,11 +7,11 @@ $ORIGIN {{ item.domain }}.
 
 ; SOA record
 @       IN      SOA     {{ powerdns[env]['soa_nameserver'] }} hostmaster.{{ item.domain }}. (
-                        {{ serial }}      ; Serial (YYYYMMDD00, auto-managed by PowerDNS)
-                        3600            ; Refresh
-                        600             ; Retry
-                        86400           ; Expire
-                        {{ powerdns[env]['zone_template_vars'][item.type]['default_ttl'] | default('3600') }} )          ; Minimum TTL
+                        {{ "%-15s"|format(serial) }} ; Serial (YYYYMMDD00, auto-managed by PowerDNS)
+                        {{ "%-15s"|format("3600") }} ; Refresh
+                        {{ "%-15s"|format("600") }} ; Retry
+                        {{ "%-15s"|format("86400") }} ; Expire
+                        {{ "%-15s"|format(powerdns[env]['zone_template_vars'][item.type]['default_ttl'] | default('3600')) }} ) ; Minimum TTL
 
 ; Name servers for this zone
 {% for ns in powerdns[env]['nameservers'] %}
