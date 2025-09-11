@@ -258,41 +258,52 @@
         serial: "{{ ansible_date_time.date | regex_replace('-', '') }}00"
       when: pdns_role == 'master'
 
-    - name: Check and process each zone
-      block:
-        - name: Check if zone exists
-          ansible.builtin.shell: |
-            sqlite3 /var/lib/powerdns/pdns.sqlite3 "SELECT COUNT(*) FROM domains WHERE name='{{ item.domain }}';"
-          register: zone_check
-          changed_when: false
-
-        - name: Generate zone file if missing
-          template:
-            src: zone.template.j2
-            dest: "zones/{{ item.domain }}.zone"
-            owner: root
-            group: root
-            mode: "0644"
-          when:
-            - zone_check.stdout | int == 0
-            - pdns_role == 'master'
-
-        - name: Import zone if missing (master)
-          ansible.builtin.shell: |
-            pdnsutil load-zone {{ item.domain }} zones/{{ item.domain }}.zone
-          when:
-            - zone_check.stdout | int == 0
-            - pdns_role == 'master'
-          notify: restart pdns
-
-        - name: Create secondary zone if missing (slave)
-          ansible.builtin.shell: |
-            pdnsutil create-secondary-zone {{ item.domain }} {{ powerdns[env].master_ip }}
-            pdnsutil activate-tsig-key {{ item.domain }} zone-transfer secondary
-          when:
-            - zone_check.stdout | int == 0
-            - pdns_role == 'slave'
+    - name: Check if zones exist
+      ansible.builtin.shell: |
+        sqlite3 /var/lib/powerdns/pdns.sqlite3 "SELECT COUNT(*) FROM domains WHERE name='{{ zone.domain }}';"
+      register: zone_checks
       loop: "{{ powerdns[env].zone_configs }}"
+      loop_control:
+        loop_var: zone
+      changed_when: false
+
+    - name: Generate zone files for missing zones
+      template:
+        src: zone.template.j2
+        dest: "zones/{{ zone_result.zone.domain }}.zone"
+        owner: root
+        group: root
+        mode: "0644"
+      vars:
+        item: "{{ zone_result.zone }}"
+      loop: "{{ zone_checks.results }}"
+      loop_control:
+        loop_var: zone_result
+      when:
+        - zone_result.stdout | int == 0
+        - pdns_role == 'master'
+
+    - name: Import missing zones (master)
+      ansible.builtin.shell: |
+        pdnsutil load-zone {{ zone_result.zone.domain }} zones/{{ zone_result.zone.domain }}.zone
+      loop: "{{ zone_checks.results }}"
+      loop_control:
+        loop_var: zone_result
+      when:
+        - zone_result.stdout | int == 0
+        - pdns_role == 'master'
+      notify: restart pdns
+
+    - name: Create missing secondary zones (slave)
+      ansible.builtin.shell: |
+        pdnsutil create-secondary-zone {{ zone_result.zone.domain }} {{ powerdns[env].master_ip }}
+        pdnsutil activate-tsig-key {{ zone_result.zone.domain }} zone-transfer secondary
+      loop: "{{ zone_checks.results }}"
+      loop_control:
+        loop_var: zone_result
+      when:
+        - zone_result.stdout | int == 0
+        - pdns_role == 'slave'
 
     - name: Optimize database after zone changes
       ansible.builtin.shell: |
