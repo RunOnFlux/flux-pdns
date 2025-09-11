@@ -13,10 +13,12 @@
         enabled: yes
       listen: "restart pdns"
 
-    - name: restart powerdns
-      ansible.builtin.systemd:
-        name: pdns
-        state: restarted
+    - name: wait for powerdns
+      wait_for:
+        port: 53
+        host: 127.0.0.1
+        delay: 5
+        timeout: 30
       listen: "restart pdns"
 
   tasks:
@@ -514,12 +516,6 @@
         minute: "0"
 
     # Post-deployment verification
-    - name: Wait for PowerDNS to start
-      wait_for:
-        port: 53
-        host: 127.0.0.1
-        delay: 5
-        timeout: 30
 
     - name: Test DNS resolution for geo-routing domain
       command: dig @127.0.0.1 cdn-geo.runonflux.io A +short
