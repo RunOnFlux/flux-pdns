@@ -152,7 +152,7 @@ end
 
 -- Debug function to show routing decisions (can be queried via TXT record)
 function appRouteDebug(qname)
-    local domain = string.lower(qname)
+    local domain = string.lower(tostring(qname))
     local first_char = string.sub(domain, 1, 1)
     local env = getEnvironment(domain)
     local target = appRoute(qname)
