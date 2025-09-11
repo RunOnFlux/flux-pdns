@@ -14,12 +14,12 @@
       listen: "restart pdns"
       register: pdns_restarted
 
-    - name: restart healthchecker
+    - name: restart dns-healthcheck
       ansible.builtin.systemd:
-        name: healthchecker
+        name: dns-healthcheck
         state: restarted
         enabled: yes
-      listen: "restart healthchecker"
+      listen: "restart dns-healthcheck"
       when:
         - pdns_role == 'master'
         - powerdns[env].health_check.enabled | default(false)
@@ -183,7 +183,7 @@
     - name: Copy health checker application files
       ansible.builtin.copy:
         src: src/
-        dest: /opt/healthchecker/
+        dest: /opt/healthchecker/src/
         owner: root
         group: root
         mode: preserve
@@ -209,7 +209,7 @@
       when:
         - pdns_role == 'master'
         - powerdns[env].health_check.enabled | default(false)
-      notify: restart healthchecker
+      notify: restart dns-healthcheck
 
     - name: Generate health checker route handler
       ansible.builtin.template:
@@ -223,7 +223,7 @@
       when:
         - pdns_role == 'master'
         - powerdns[env].health_check.enabled | default(false)
-      notify: restart healthchecker
+      notify: restart dns-healthcheck
 
     - name: Install health checker npm dependencies
       npm:
@@ -233,10 +233,10 @@
         - pdns_role == 'master'
         - powerdns[env].health_check.enabled | default(false)
 
-    - name: Create health checker systemd service
+    - name: Create DNS health check systemd service
       ansible.builtin.copy:
-        src: files/healthchecker.service
-        dest: /etc/systemd/system/healthchecker.service
+        src: files/dns-healthcheck.service
+        dest: /etc/systemd/system/dns-healthcheck.service
         owner: root
         group: root
         mode: "0644"
@@ -244,16 +244,16 @@
         - pdns_role == 'master'
         - powerdns[env].health_check.enabled | default(false)
 
-    - name: Reload systemd daemon for health checker
+    - name: Reload systemd daemon for DNS health check
       ansible.builtin.systemd:
         daemon_reload: yes
       when:
         - pdns_role == 'master'
         - powerdns[env].health_check.enabled | default(false)
 
-    - name: Start and enable health checker service
+    - name: Start and enable DNS health check service
       ansible.builtin.systemd:
-        name: healthchecker
+        name: dns-healthcheck
         state: "{{ 'started' if (pdns_role == 'master' and powerdns[env].health_check.enabled | default(false)) else 'stopped' }}"
         enabled: "{{ pdns_role == 'master' and powerdns[env].health_check.enabled | default(false) }}"
 
