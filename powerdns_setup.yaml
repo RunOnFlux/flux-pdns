@@ -13,11 +13,11 @@
         enabled: yes
       listen: "restart pdns"
 
-    - name: reload powerdns
+    - name: restart powerdns
       ansible.builtin.systemd:
         name: pdns
-        state: reloaded
-      listen: "reload pdns"
+        state: restarted
+      listen: "restart pdns"
 
   tasks:
     - name: Create apt keyrings directory
@@ -273,7 +273,7 @@
         group: root
         mode: "0644"
       when: DEPLOY_ENV == 'production'
-      notify: reload pdns
+      notify: restart pdns
 
     - name: Copy zone file for geo-routing (staging)
       ansible.builtin.copy:
@@ -283,7 +283,7 @@
         group: root
         mode: "0644"
       when: DEPLOY_ENV == 'staging'
-      notify: reload pdns
+      notify: restart pdns
 
     - name: Copy zone file for app routing (production)
       ansible.builtin.copy:
@@ -293,7 +293,7 @@
         group: root
         mode: "0644"
       when: DEPLOY_ENV == 'production'
-      notify: reload pdns
+      notify: restart pdns
 
     - name: Copy zone file for app routing (staging)
       ansible.builtin.copy:
@@ -303,7 +303,7 @@
         group: root
         mode: "0644"
       when: DEPLOY_ENV == 'staging'
-      notify: reload pdns
+      notify: restart pdns
 
     # Zone migration from BIND to SQLite3 using zone2sql
     - name: Check if zones are already imported
@@ -341,11 +341,11 @@
       ansible.builtin.shell: |
         pdnsutil import-tsig-key zone-transfer hmac-sha256 "{{ powerdns[env].tsig_zone_transfer_key }}"
       when: "'zone-transfer' not in tsig_key_exists.stdout"
-      notify: reload pdns
+      notify: restart pdns
 
     - name: Configure TSIG metadata for domains
       ansible.builtin.shell: |
-        current_value=$(pdnsutil get-meta "{{ item }}" TSIG-ALLOW-AXFR 2>/dev/null || echo "")
+        current_value=$(pdnsutil get-meta "{{ item }}" TSIG-ALLOW-AXFR 2>/dev/null | grep "^TSIG-ALLOW-AXFR" | cut -d'=' -f2 | xargs)
         if [ "$current_value" != "zone-transfer" ]; then
           pdnsutil set-meta "{{ item }}" TSIG-ALLOW-AXFR zone-transfer
           echo "CHANGED"
@@ -356,11 +356,11 @@
       when: pdns_role == 'master'
       register: tsig_metadata_result
       changed_when: "'CHANGED' in tsig_metadata_result.stdout"
-      notify: reload pdns
+      notify: restart pdns
 
     - name: Configure TSIG for NOTIFY packets
       ansible.builtin.shell: |
-        current_value=$(pdnsutil get-meta "{{ item }}" NOTIFY-DNSUPDATE 2>/dev/null || echo "")
+        current_value=$(pdnsutil get-meta "{{ item }}" NOTIFY-DNSUPDATE 2>/dev/null | grep "^NOTIFY-DNSUPDATE" | cut -d'=' -f2 | xargs)
         if [ "$current_value" != "zone-transfer" ]; then
           pdnsutil set-meta "{{ item }}" NOTIFY-DNSUPDATE zone-transfer
           echo "CHANGED"
@@ -371,11 +371,11 @@
       when: pdns_role == 'master'
       register: notify_tsig_result
       changed_when: "'CHANGED' in notify_tsig_result.stdout"
-      notify: reload pdns
+      notify: restart pdns
 
     - name: Configure ALSO-NOTIFY for zone-level notifications
       ansible.builtin.shell: |
-        current_value=$(pdnsutil get-meta "{{ item }}" ALSO-NOTIFY 2>/dev/null || echo "")
+        current_value=$(pdnsutil get-meta "{{ item }}" ALSO-NOTIFY 2>/dev/null | grep "^ALSO-NOTIFY" | cut -d'=' -f2 | xargs)
         expected_value="{{ powerdns[env].slave_ips | join(',') }}"
         if [ "$current_value" != "$expected_value" ]; then
           pdnsutil set-meta "{{ item }}" ALSO-NOTIFY {{ powerdns[env].slave_ips | join(',') }}
@@ -387,11 +387,11 @@
       when: pdns_role == 'master'
       register: also_notify_result
       changed_when: "'CHANGED' in also_notify_result.stdout"
-      notify: reload pdns
+      notify: restart pdns
 
     - name: Configure SOA-EDIT for serial increments
       ansible.builtin.shell: |
-        current_value=$(pdnsutil get-meta "{{ item }}" SOA-EDIT 2>/dev/null || echo "")
+        current_value=$(pdnsutil get-meta "{{ item }}" SOA-EDIT 2>/dev/null | grep "^SOA-EDIT" | cut -d'=' -f2 | xargs)
         if [ "$current_value" != "INCEPTION-INCREMENT" ]; then
           pdnsutil set-meta "{{ item }}" SOA-EDIT INCEPTION-INCREMENT
           echo "CHANGED"
@@ -402,11 +402,11 @@
       when: pdns_role == 'master'
       register: soa_edit_result
       changed_when: "'CHANGED' in soa_edit_result.stdout"
-      notify: reload pdns
+      notify: restart pdns
 
     - name: Configure SOA-EDIT-API for certbot compatibility
       ansible.builtin.shell: |
-        current_value=$(pdnsutil get-meta "{{ item }}" SOA-EDIT-API 2>/dev/null || echo "")
+        current_value=$(pdnsutil get-meta "{{ item }}" SOA-EDIT-API 2>/dev/null | grep "^SOA-EDIT-API" | cut -d'=' -f2 | xargs)
         if [ "$current_value" != "DEFAULT" ]; then
           pdnsutil set-meta "{{ item }}" SOA-EDIT-API DEFAULT
           echo "CHANGED"
@@ -417,7 +417,7 @@
       when: pdns_role == 'master'
       register: soa_edit_api_result
       changed_when: "'CHANGED' in soa_edit_api_result.stdout"
-      notify: reload pdns
+      notify: restart pdns
 
     - name: Set zone kind to MASTER for automatic NOTIFY
       ansible.builtin.shell: |
@@ -431,7 +431,7 @@
       when: pdns_role == 'master'
       register: zone_kind_result
       changed_when: "'CHANGED' in zone_kind_result.stdout"
-      notify: reload pdns
+      notify: restart pdns
 
     # Scripts directory setup
     - name: Ensure /opt/pdns/scripts directory exists
@@ -452,7 +452,7 @@
         owner: root
         group: root
         mode: "0644"
-      notify: reload pdns
+      notify: restart pdns
 
     - name: Copy Lua app-routing script
       ansible.builtin.copy:
@@ -461,7 +461,7 @@
         owner: root
         group: root
         mode: "0644"
-      notify: reload pdns
+      notify: restart pdns
 
     # Logrotate configuration
     - name: Copy PowerDNS logrotate configuration
@@ -481,7 +481,7 @@
 
     - name: Allow PowerDNS API access from cert server
       ansible.builtin.shell: |
-        if ! ufw status numbered | grep -q "{{ powerdns.cert_server_ip }}.*{{ powerdns[env].http_api_ip }}.*8081"; then
+        if ! ufw status numbered | grep -q "{{ powerdns[env].http_api_ip }} 8081/tcp.*ALLOW IN.*{{ powerdns.cert_server_ip }}"; then
           ufw allow from {{ powerdns.cert_server_ip }} to {{ powerdns[env].http_api_ip }} port 8081 proto tcp comment 'PowerDNS API from cert server'
           echo "CHANGED"
         else
