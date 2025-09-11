@@ -15,6 +15,10 @@
       register: pdns_restarted
 
   tasks:
+    - name: Set environment variable
+      ansible.builtin.set_fact:
+        env: "{{ 'staging' if DEPLOY_ENV == 'staging' else 'production' }}"
+
     - name: Create apt keyrings directory
       ansible.builtin.file:
         path: /etc/apt/keyrings
@@ -276,9 +280,6 @@
     # Master/Slave replication setup with SQLite3 backend
     # TSIG keys are now stored in the database, not in separate files
 
-    - name: Set environment for TSIG key selection
-      ansible.builtin.set_fact:
-        env: "{{ 'staging' if DEPLOY_ENV == 'staging' else 'production' }}"
 
     - name: Generate TSIG key for zone transfers if not set
       ansible.builtin.set_fact:
