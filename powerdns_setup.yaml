@@ -301,7 +301,7 @@
     # Zone migration - check and import zones individually
     - name: Set dynamic serial number for zone files
       set_fact:
-        serial: "{{ ansible_date_time.date | regex_replace('-', '') }}00"
+        zone_serial: "{{ ansible_date_time.date | regex_replace('-', '') }}00"
       when: pdns_role == 'master'
 
     - name: Check if zones exist
