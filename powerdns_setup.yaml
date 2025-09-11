@@ -30,22 +30,6 @@
       ansible.builtin.set_fact:
         env: "{{ 'staging' if DEPLOY_ENV == 'staging' else 'production' }}"
 
-    - name: Initialize host IP variables
-      ansible.builtin.set_fact:
-        master_ip: ""
-        slave_ips: []
-
-    - name: Set derived master IP
-      ansible.builtin.set_fact:
-        master_ip: "{{ hostvars[item]['public_ip'] | default(hostvars[item]['ansible_host']) }}"
-      loop: "{{ groups[group_names[0]] }}"
-      when: hostvars[item]['pdns_role'] == 'master'
-
-    - name: Set derived slave IPs
-      ansible.builtin.set_fact:
-        slave_ips: "{{ slave_ips + [hostvars[item]['public_ip'] | default(hostvars[item]['ansible_host'])] }}"
-      loop: "{{ groups[group_names[0]] }}"
-      when: hostvars[item]['pdns_role'] == 'slave'
 
     - name: Set API IP
       ansible.builtin.set_fact:
@@ -370,7 +354,7 @@
 
     - name: Create missing secondary zones (slave)
       ansible.builtin.shell: |
-        pdnsutil create-secondary-zone {{ zone_result.zone.domain }} {{ master_ip }}
+        pdnsutil create-secondary-zone {{ zone_result.zone.domain }} {{ powerdns[env].master_ips | join(' ') }}
         pdnsutil activate-tsig-key {{ zone_result.zone.domain }} zone-transfer secondary
       loop: "{{ zone_checks.results }}"
       loop_control:
@@ -430,9 +414,9 @@
     - name: Configure ALSO-NOTIFY for zone-level notifications
       ansible.builtin.shell: |
         current_value=$(pdnsutil get-meta "{{ item }}" ALSO-NOTIFY 2>/dev/null | grep "^ALSO-NOTIFY" | cut -d'=' -f2 | xargs)
-        expected_value="{{ slave_ips | join(',') }}"
+        expected_value="{{ powerdns[env].slave_ips | join(',') }}"
         if [ "$current_value" != "$expected_value" ]; then
-          pdnsutil set-meta "{{ item }}" ALSO-NOTIFY {{ slave_ips | join(',') }}
+          pdnsutil set-meta "{{ item }}" ALSO-NOTIFY {{ powerdns[env].slave_ips | join(',') }}
           echo "CHANGED"
         else
           echo "OK"
@@ -585,7 +569,7 @@
 
     # Master/Slave replication validation
     - name: Test zone transfer from master (slave servers only)
-      command: dig @{{ master_ip }} {{ 'cdn-geodev.runonflux.io' if DEPLOY_ENV == 'staging' else 'cdn-geo.runonflux.io' }} AXFR
+      command: dig @{{ powerdns[env].master_ips[0] }} {{ 'cdn-geodev.runonflux.io' if DEPLOY_ENV == 'staging' else 'cdn-geo.runonflux.io' }} AXFR
       register: axfr_test
       retries: 3
       delay: 10

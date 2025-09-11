@@ -36,6 +36,8 @@ powerdns:
     soa_nameserver: "pdns2.runonflux.io."
     soa_email: "hostmaster.runonflux.io."
     nameservers: ["pdns2.runonflux.io."]
+    master_ips: ["5.39.57.39"]
+    slave_ips: ["5.161.41.40"]
     # TSIG key for zone transfers (generate with: openssl rand -base64 48)
     tsig_zone_transfer_key: "REPLACE_WITH_STAGING_ZONE_TRANSFER_KEY"
     # API key for certbot (generate with: openssl rand -base64 32)
@@ -74,6 +76,8 @@ powerdns:
     soa_nameserver: "pdns1.runonflux.io."
     soa_email: "hostmaster.runonflux.io."
     nameservers: ["pdns1.runonflux.io."]
+    master_ips: ["5.39.57.38"]
+    slave_ips: ["5.161.203.77", "178.128.30.247"]
     # TSIG key for zone transfers (generate with: openssl rand -base64 48)
     tsig_zone_transfer_key: "REPLACE_WITH_PRODUCTION_ZONE_TRANSFER_KEY"
     # API key for certbot (generate with: openssl rand -base64 32)

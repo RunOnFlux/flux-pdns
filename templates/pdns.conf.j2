@@ -79,13 +79,8 @@ secondary=no
 allow-axfr-ips=127.0.0.1
 
 # Notify slaves when zones change
-{% set slave_ips = [] %}
-{% for host in groups[group_names[0]] %}
-  {% if hostvars[host]['pdns_role'] == 'slave' %}
-    {% set _ = slave_ips.append(hostvars[host]['public_ip'] | default(hostvars[host]['ansible_host'])) %}
-  {% endif %}
-{% endfor %}
-also-notify={{ slave_ips | join(',') }}
+{% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
+also-notify={{ powerdns[env].slave_ips | join(',') }}
 
 # Enable DNS updates for ACME challenges
 dnsupdate=yes
