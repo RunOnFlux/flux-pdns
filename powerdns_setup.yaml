@@ -307,6 +307,11 @@
       register: zone_count
       changed_when: false
 
+    - name: Set dynamic serial number for zone files
+      set_fact:
+        serial: "{{ ansible_date_time.date | regex_replace('-', '') }}00"
+      when: zone_count.stdout | int == 0 and pdns_role == 'master'
+
     - name: Generate fresh zone files for import
       template:
         src: zone.template.j2
@@ -314,11 +319,6 @@
         owner: root
         group: root
         mode: "0644"
-      vars: "{{ powerdns[env].zone_template_vars[item.type] | combine(powerdns[env] | combine({
-        'zone_name': item.domain,
-        'environment': DEPLOY_ENV,
-        'serial': ansible_date_time.date | regex_replace('-', '') + '00'
-      })) }}"
       loop: "{{ powerdns[env].zone_configs }}"
       when: zone_count.stdout | int == 0 and pdns_role == 'master'
 
