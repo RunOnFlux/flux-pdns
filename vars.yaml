@@ -11,6 +11,7 @@ powerdns:
       - { domain: "cdn-geodev.runonflux.io", type: "geo" }
       - { domain: "app2.runonflux.io", type: "app" }
     soa_nameserver: "pdns2.runonflux.io."
+    soa_email: "hostmaster.runonflux.io."
     nameservers: ["pdns2.runonflux.io."]
     zone_template_vars:
       geo:
@@ -60,6 +61,7 @@ powerdns:
       - { domain: "cdn-geo.runonflux.io", type: "geo" }
       - { domain: "app.runonflux.io", type: "app" }
     soa_nameserver: "pdns1.runonflux.io."
+    soa_email: "hostmaster.runonflux.io."
     nameservers: ["pdns1.runonflux.io."]
     zone_template_vars:
       geo:
