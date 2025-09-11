@@ -86,7 +86,7 @@ def generate_zone(zone_name, environment, zone_type, output_dir, config):
                     {
                         "name": "asia-east",
                         "description": "Hong Kong Asia",
-                        "server": "cdn-4.runonflux.io",
+                        "server": "cdn-12.runonflux.io",
                         "ip": "114.29.237.116",
                     },
                 ],

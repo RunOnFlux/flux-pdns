@@ -52,7 +52,7 @@ CDN_SERVERS = [
         "port": 443,
     },
     {
-        "name": "cdn-4.runonflux.io",
+        "name": "cdn-12.runonflux.io",
         "ip": "114.29.237.116",
         "location": "Hong Kong, East Asia",
         "port": 443,

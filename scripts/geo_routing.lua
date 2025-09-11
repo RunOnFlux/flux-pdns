@@ -20,7 +20,7 @@ servers = {
         lon = 2.3768
     },
     {
-        name = "cdn-4.runonflux.io",
+        name = "cdn-12.runonflux.io",
         ip = "114.29.237.116",
         location = "asia-east",
         continent = "AS",

@@ -17,7 +17,7 @@ The geo-routing system provides:
 |--------|------------|----------|----------|
 | CDN-6 | 107.152.47.137 | West Coast USA | cdn-6.runonflux.io |
 | CDN-1 | 5.39.57.50 | Dunkerque, EU | cdn-1.runonflux.io |
-| CDN-4 | 114.29.237.116 | Hong Kong, East Asia | cdn-4.runonflux.io |
+| CDN-12 | 114.29.237.116 | Hong Kong, East Asia | cdn-12.runonflux.io |
 
 ## Architecture
 
