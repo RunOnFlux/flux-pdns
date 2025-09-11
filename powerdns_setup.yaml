@@ -427,11 +427,11 @@
       changed_when: "'CHANGED' in also_notify_result.stdout"
       notify: restart pdns
 
-    - name: Configure SOA-EDIT for serial increments
+    - name: Configure SOA-EDIT to prevent load-zone incrementation
       ansible.builtin.shell: |
         current_value=$(pdnsutil get-meta "{{ item }}" SOA-EDIT 2>/dev/null | grep "^SOA-EDIT" | cut -d'=' -f2 | xargs)
-        if [ "$current_value" != "INCEPTION-INCREMENT" ]; then
-          pdnsutil set-meta "{{ item }}" SOA-EDIT INCEPTION-INCREMENT
+        if [ "$current_value" != "NONE" ]; then
+          pdnsutil set-meta "{{ item }}" SOA-EDIT NONE
           echo "CHANGED"
         else
           echo "OK"
@@ -442,11 +442,11 @@
       changed_when: "'CHANGED' in soa_edit_result.stdout"
       notify: restart pdns
 
-    - name: Configure SOA-EDIT-API for certbot compatibility
+    - name: Configure SOA-EDIT-API for HTTP API incrementation
       ansible.builtin.shell: |
         current_value=$(pdnsutil get-meta "{{ item }}" SOA-EDIT-API 2>/dev/null | grep "^SOA-EDIT-API" | cut -d'=' -f2 | xargs)
-        if [ "$current_value" != "DEFAULT" ]; then
-          pdnsutil set-meta "{{ item }}" SOA-EDIT-API DEFAULT
+        if [ "$current_value" != "INCEPTION-INCREMENT" ]; then
+          pdnsutil set-meta "{{ item }}" SOA-EDIT-API INCEPTION-INCREMENT
           echo "CHANGED"
         else
           echo "OK"
