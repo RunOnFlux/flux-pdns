@@ -14,6 +14,16 @@
       listen: "restart pdns"
       register: pdns_restarted
 
+    - name: restart healthchecker
+      ansible.builtin.systemd:
+        name: healthchecker
+        state: restarted
+        enabled: yes
+      listen: "restart healthchecker"
+      when:
+        - pdns_role == 'master'
+        - powerdns[env].health_check.enabled | default(false)
+
   tasks:
     - name: Set environment variable
       ansible.builtin.set_fact:
@@ -199,6 +209,7 @@
       when:
         - pdns_role == 'master'
         - powerdns[env].health_check.enabled | default(false)
+      notify: restart healthchecker
 
     - name: Generate health checker route handler
       ansible.builtin.template:
@@ -212,6 +223,7 @@
       when:
         - pdns_role == 'master'
         - powerdns[env].health_check.enabled | default(false)
+      notify: restart healthchecker
 
     - name: Install health checker npm dependencies
       npm:
@@ -287,7 +299,6 @@
 
     # Master/Slave replication setup with SQLite3 backend
     # TSIG keys are now stored in the database, not in separate files
-
 
     - name: Generate TSIG key for zone transfers if not set
       ansible.builtin.set_fact:
@@ -467,10 +478,6 @@
         owner: root
         group: root
         mode: 0755
-
-    # Note: Variables and pipe backend script no longer needed
-    # App routing is now handled by Lua scripts in zone files
-
       notify: restart pdns
 
     - name: Copy Lua app-routing script
