@@ -319,8 +319,6 @@
         owner: root
         group: root
         mode: "0644"
-      vars:
-        zone_name: "{{ item.domain }}"
       loop: "{{ powerdns[env].zone_configs }}"
       when: zone_count.stdout | int == 0 and pdns_role == 'master'
 
