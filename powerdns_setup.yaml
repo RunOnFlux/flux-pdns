@@ -150,18 +150,43 @@
         hour: "3"
         minute: "0"
 
-    # Existing health checker setup
+    # Health checker setup (masters only)
     - name: Create the destination directory
       file:
         path: /opt/healthchecker/src
         state: directory
       become: yes
+      when:
+        - pdns_role == 'master'
+        - powerdns[env].health_check.enabled | default(false)
 
     - name: Sync application files
       synchronize:
         src: src/
         dest: /opt/healthchecker/src
         recursive: yes
+      when:
+        - pdns_role == 'master'
+        - powerdns[env].health_check.enabled | default(false)
+
+    - name: Template geo_routing.lua script
+      ansible.builtin.template:
+        src: templates/geo_routing.lua.j2
+        dest: /opt/pdns/scripts/geo_routing.lua
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Template the health configuration
+      ansible.builtin.template:
+        src: templates/health-config.json.j2
+        dest: /opt/healthchecker/src/config.json
+        owner: root
+        group: root
+        mode: "0644"
+      when:
+        - pdns_role == 'master'
+        - powerdns[env].health_check.enabled | default(false)
 
     - name: Template the health route
       ansible.builtin.template:
@@ -169,14 +194,20 @@
         dest: /opt/healthchecker/src/routes/health.js
         owner: root
         group: root
-        mode: 0777
+        mode: 0644
       vars:
         subdomain: "{{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}"
+      when:
+        - pdns_role == 'master'
+        - powerdns[env].health_check.enabled | default(false)
 
     - name: Install npm dependencies for healthchecker
       npm:
         path: /opt/healthchecker/src
         state: present
+      when:
+        - pdns_role == 'master'
+        - powerdns[env].health_check.enabled | default(false)
 
     - name: Create systemd service for healthchecker
       ansible.builtin.copy:
@@ -185,16 +216,22 @@
         owner: root
         group: root
         mode: "0644"
+      when:
+        - pdns_role == 'master'
+        - powerdns[env].health_check.enabled | default(false)
 
     - name: Reload systemd daemon
       ansible.builtin.systemd:
         daemon_reload: yes
+      when:
+        - pdns_role == 'master'
+        - powerdns[env].health_check.enabled | default(false)
 
     - name: Start and enable healthchecker service
       ansible.builtin.systemd:
         name: healthchecker
-        state: started
-        enabled: yes
+        state: "{{ 'started' if (pdns_role == 'master' and powerdns[env].health_check.enabled | default(false)) else 'stopped' }}"
+        enabled: "{{ pdns_role == 'master' and powerdns[env].health_check.enabled | default(false) }}"
 
     # PowerDNS configuration
     - name: Create PowerDNS zones directory

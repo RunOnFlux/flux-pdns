@@ -1,18 +1,230 @@
 var express = require('express');
 var router = express.Router();
 const { Resolver } = require('node:dns');
+const { promisify } = require('util');
 
 const resolver = new Resolver();
+resolver.setServers(['127.0.0.1']);
 
+// Promisify DNS resolver methods
+const resolveCname = promisify(resolver.resolveCname.bind(resolver));
+const resolveA = promisify(resolver.resolve4.bind(resolver));
+const resolveTxt = promisify(resolver.resolveTxt.bind(resolver));
+const resolveSoa = promisify(resolver.resolveSoa.bind(resolver));
+const resolveNs = promisify(resolver.resolveNs.bind(resolver));
+
+// Configuration based on environment
+const config = {
+  app_domain: '{{ subdomain }}.runonflux.io',
+  geo_domain: '{{ "cdn-geodev" if DEPLOY_ENV == "staging" else "cdn-geo" }}.runonflux.io',
+  expected_load_balancers: {
+    staging: ['fdm-lb-2-1.runonflux.io', 'fdm-lb-2-2.runonflux.io'],
+    production: ['fdm-lb-1-1.runonflux.io', 'fdm-lb-1-2.runonflux.io', 'fdm-lb-1-3.runonflux.io', 'fdm-lb-1-4.runonflux.io']
+  },
+  expected_cdn_ips: ['107.152.47.137', '5.39.57.50', '114.29.237.116'],
+  environment: '{{ DEPLOY_ENV }}'
+};
+
+// Test app routing functionality
+async function testAppRouting() {
+  const testDomains = [
+    'web.' + config.app_domain,
+    'test.' + config.app_domain, 
+    'app123.' + config.app_domain,
+    'xyz99.' + config.app_domain
+  ];
+  
+  const result = {
+    status: 'pass',
+    tested_domains: testDomains.length,
+    passed: 0,
+    failed: 0,
+    samples: {},
+    debug_endpoint: 'pass',
+    errors: []
+  };
+
+  // Test wildcard routing
+  for (const domain of testDomains) {
+    try {
+      const addresses = await resolveCname(domain);
+      if (addresses && addresses.length > 0) {
+        const target = addresses[0];
+        result.samples[domain.replace('.' + config.app_domain, '')] = target;
+        
+        // Validate target is expected load balancer
+        const expectedLBs = config.expected_load_balancers[config.environment];
+        if (expectedLBs.includes(target)) {
+          result.passed++;
+        } else {
+          result.failed++;
+          result.errors.push(`${domain} resolved to unexpected target: ${target}`);
+        }
+      } else {
+        result.failed++;
+        result.errors.push(`${domain} returned no CNAME records`);
+      }
+    } catch (err) {
+      result.failed++;
+      result.errors.push(`${domain} failed: ${err.message}`);
+    }
+  }
+
+  // Test debug endpoint
+  try {
+    const debugResponse = await resolveTxt('_debug.' + config.app_domain);
+    if (!debugResponse || debugResponse.length === 0) {
+      result.debug_endpoint = 'fail';
+      result.errors.push('_debug endpoint returned no TXT records');
+    }
+  } catch (err) {
+    result.debug_endpoint = 'fail';  
+    result.errors.push(`_debug endpoint failed: ${err.message}`);
+  }
+
+  if (result.failed > 0 || result.debug_endpoint === 'fail') {
+    result.status = 'fail';
+  }
+
+  return result;
+}
+
+// Test geo routing functionality
+async function testGeoRouting() {
+  const result = {
+    status: 'pass',
+    main_record: null,
+    health_records: 0,
+    health_passed: 0,
+    errors: []
+  };
+
+  // Test main geo routing record
+  try {
+    const addresses = await resolveA(config.geo_domain);
+    if (addresses && addresses.length > 0) {
+      result.main_record = addresses[0];
+      
+      // Validate it's one of expected CDN IPs
+      if (!config.expected_cdn_ips.includes(addresses[0])) {
+        result.errors.push(`Main geo record returned unexpected IP: ${addresses[0]}`);
+        result.status = 'fail';
+      }
+    } else {
+      result.errors.push('Main geo record returned no A records');
+      result.status = 'fail';
+    }
+  } catch (err) {
+    result.errors.push(`Main geo record failed: ${err.message}`);
+    result.status = 'fail';
+  }
+
+  // Test health check records for each region
+  const regions = ['us-west', 'eu-west', 'asia-east'];
+  for (const region of regions) {
+    try {
+      result.health_records++;
+      const txtRecords = await resolveTxt(`_health.${region}.${config.geo_domain}`);
+      if (txtRecords && txtRecords.length > 0) {
+        result.health_passed++;
+      } else {
+        result.errors.push(`_health.${region} returned no TXT records`);
+      }
+    } catch (err) {
+      result.errors.push(`_health.${region} failed: ${err.message}`);
+    }
+  }
+
+  if (result.health_passed !== result.health_records) {
+    result.status = 'fail';
+  }
+
+  return result;
+}
+
+// Test basic DNS functionality
+async function testBasicDns() {
+  const result = {
+    status: 'pass',
+    response_time_ms: 0,
+    soa_serial: null,
+    nameservers: [],
+    errors: []
+  };
+
+  const startTime = Date.now();
+
+  try {
+    // Test SOA record
+    const soaRecord = await resolveSoa(config.app_domain);
+    if (soaRecord) {
+      result.soa_serial = soaRecord.serial;
+    }
+
+    // Test NS records
+    const nsRecords = await resolveNs(config.app_domain);
+    if (nsRecords) {
+      result.nameservers = nsRecords;
+    }
+
+    result.response_time_ms = Date.now() - startTime;
+  } catch (err) {
+    result.status = 'fail';
+    result.errors.push(`Basic DNS test failed: ${err.message}`);
+  }
+
+  return result;
+}
+
+// Main health check endpoint
 router.get('/', async (req, res) => {
-  resolver.setServers(['127.0.0.1']);
+  const healthResult = {
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    checks: {},
+    errors: []
+  };
 
-  resolver.resolveCname(`web.{{ subdomain }}.runonflux.io`, (err, addresses) => {
-    if (err) {
-      return res.status(500).json({ error: err })
-    };
-    return res.status(200).json(addresses);
-  });
+  try {
+    // Run all health checks
+    const [appResult, geoResult, basicResult] = await Promise.all([
+      testAppRouting(),
+      testGeoRouting(), 
+      testBasicDns()
+    ]);
+
+    healthResult.checks.app_routing = appResult;
+    healthResult.checks.geo_routing = geoResult;
+    healthResult.checks.basic_dns = basicResult;
+
+    // Collect all errors
+    [appResult, geoResult, basicResult].forEach(check => {
+      if (check.errors && check.errors.length > 0) {
+        healthResult.errors.push(...check.errors);
+      }
+    });
+
+    // Determine overall status
+    const failedChecks = [appResult, geoResult, basicResult].filter(check => check.status === 'fail');
+    
+    if (failedChecks.length > 0) {
+      // Critical failures: app_routing or basic_dns
+      if (appResult.status === 'fail' || basicResult.status === 'fail') {
+        healthResult.status = 'unhealthy';
+        return res.status(503).json(healthResult);
+      } else {
+        healthResult.status = 'degraded';
+        return res.status(200).json(healthResult);
+      }
+    }
+
+    return res.status(200).json(healthResult);
+
+  } catch (err) {
+    healthResult.status = 'unhealthy';
+    healthResult.errors.push(`Health check failed: ${err.message}`);
+    return res.status(503).json(healthResult);
+  }
 });
 
 module.exports = router;

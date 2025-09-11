@@ -1,0 +1,6 @@
+{
+  "enabled": {{ powerdns[env].health_check.enabled | default(false) | lower }},
+  "bind_address": "{{ powerdns[env].health_check.bind_address | default('127.0.0.1') }}",
+  "port": {{ powerdns[env].health_check.port | default(3000) }},
+  "environment": "{{ DEPLOY_ENV }}"
+}

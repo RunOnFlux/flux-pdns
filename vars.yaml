@@ -13,6 +13,10 @@ powerdns:
     soa_nameserver: "pdns2.runonflux.io."
     soa_email: "hostmaster.runonflux.io."
     nameservers: ["pdns2.runonflux.io."]
+    health_check:
+      enabled: true
+      bind_address: "10.100.0.154"
+      port: 3000
     zone_template_vars:
       geo:
         default_ttl: "300"
@@ -63,6 +67,10 @@ powerdns:
     soa_nameserver: "pdns1.runonflux.io."
     soa_email: "hostmaster.runonflux.io."
     nameservers: ["pdns1.runonflux.io."]
+    health_check:
+      enabled: true
+      bind_address: "10.100.0.153"
+      port: 3000
     zone_template_vars:
       geo:
         default_ttl: "300"

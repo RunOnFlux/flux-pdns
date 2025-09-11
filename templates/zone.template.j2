@@ -44,6 +44,11 @@ _config         IN      LUA     LUA     "dofile('/opt/pdns/scripts/geo_routing.l
 {% for region in powerdns[env]['zone_template_vars'][item.type]['geo_regions'] | default([]) %}
 _health.{{ region.name }}    300    IN    TXT    "{{ region.description }} - {{ region.server }} - {{ region.ip }}"
 {% endfor %}
+
+{% if powerdns[env]['zone_template_vars'][item.type]['status_endpoint'] | default(false) %}
+; Dynamic status endpoint for monitoring
+_status         IN      LUA     TXT     ";include('_config'); return getServerStatus()"
+{% endif %}
 {% endif %}
 
 {% if custom_records is defined %}

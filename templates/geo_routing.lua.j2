@@ -1,32 +1,16 @@
 -- PowerDNS Lua script for geographic routing with health checks
--- This script handles DNS queries for cdn-geo.runonflux.io
+-- This script handles DNS queries for {{ powerdns[env].zones | select('match', '^cdn-geo') | list | join(', ') }}
+-- Generated from template - DO NOT EDIT MANUALLY
 
 -- Server configuration with IP addresses and geographic locations
 servers = {
+{% for region in powerdns[env]['zone_template_vars']['geo']['geo_regions'] | default([]) %}
     {
-        name = "cdn-6.runonflux.io",
-        ip = "107.152.47.137",
-        location = "us-west",
-        continent = "NA",
-        lat = 37.7749,
-        lon = -122.4194
-    },
-    {
-        name = "cdn-1.runonflux.io",
-        ip = "5.39.57.50",
-        location = "eu-west",
-        continent = "EU",
-        lat = 51.0344,
-        lon = 2.3768
-    },
-    {
-        name = "cdn-12.runonflux.io",
-        ip = "114.29.237.116",
-        location = "asia-east",
-        continent = "AS",
-        lat = 22.3193,
-        lon = 114.1694
-    }
+        name = "{{ region.server }}",
+        ip = "{{ region.ip }}",
+        location = "{{ region.name }}"
+    }{{ "," if not loop.last else "" }}
+{% endfor %}
 }
 
 -- Track server recovery times (servers that were down and came back up)
@@ -183,7 +167,7 @@ function getServerStatus()
     local status_parts = {}
     local healthy_count = 0
     local available_count = 0
-
+    
     for _, server in ipairs(servers) do
         local is_available = false
         for _, available_ip in ipairs(available_ips) do
@@ -205,12 +189,12 @@ function getServerStatus()
         elseif is_available then
             server_status = "RECOVERING"
         end
-
+        
         table.insert(status_parts, server.location .. ":" .. server_status)
     end
 
     -- Format as a single string suitable for TXT record
-    local summary = string.format("Servers:%d Healthy:%d Available:%d",
+    local summary = string.format("Servers:%d Healthy:%d Available:%d", 
                                    #servers, healthy_count, available_count)
     return summary .. " Status:" .. table.concat(status_parts, ",")
 end
