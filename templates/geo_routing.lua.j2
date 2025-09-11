@@ -3,8 +3,17 @@
 -- Generated from template - DO NOT EDIT MANUALLY
 
 -- Server configuration with IP addresses and geographic locations
+{% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
+{% set all_regions = [] %}
+{% for zone_config in powerdns[env].zone_configs %}
+  {% if zone_config.template_vars.geo_routing | default(false) %}
+    {% for region in zone_config.template_vars.geo_regions | default([]) %}
+      {% set _ = all_regions.append(region) %}
+    {% endfor %}
+  {% endif %}
+{% endfor %}
 servers = {
-{% for region in powerdns[env]['zone_template_vars']['geo']['geo_regions'] | default([]) %}
+{% for region in all_regions %}
     {
         name = "{{ region.server }}",
         ip = "{{ region.ip }}",

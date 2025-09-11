@@ -2,7 +2,7 @@
 ; Environment: {{ DEPLOY_ENV }}
 ; Generated: {{ ansible_date_time.iso8601 | default('Manual') }}
 ;
-$TTL {{ powerdns[env]['zone_template_vars'][item.type]['default_ttl'] | default('3600') }}
+$TTL {{ item.template_vars.default_ttl | default('3600') }}
 $ORIGIN {{ item.domain }}.
 
 ; SOA record
@@ -11,29 +11,29 @@ $ORIGIN {{ item.domain }}.
                         {{ "%-15s"|format("3600") }} ; Refresh
                         {{ "%-15s"|format("600") }} ; Retry
                         {{ "%-15s"|format("86400") }} ; Expire
-                        {{ "%-15s"|format((powerdns[env]['zone_template_vars'][item.type]['default_ttl'] | default('3600')) ~ ' )') }} ; Minimum TTL
+                        {{ "%-15s"|format((item.template_vars.default_ttl | default('3600')) ~ ' )') }} ; Minimum TTL
 
 ; Name servers for this zone
 {% for ns in powerdns[env]['nameservers'] %}
 @       IN      NS      {{ ns }}
 {% endfor %}
 
-{% if powerdns[env]['zone_template_vars'][item.type]['lua_routing'] | default(false) %}
+{% if item.template_vars.lua_routing | default(false) %}
 ; Load Lua functions for dynamic routing
-_config         IN      LUA     LUA     "dofile('/opt/pdns/scripts/{{ powerdns[env]['zone_template_vars'][item.type]['routing_script'] | default('app_routing.lua') }}')"
+_config         IN      LUA     LUA     "dofile('/opt/pdns/scripts/{{ item.template_vars.routing_script | default('app_routing.lua') }}')"
 
 ; Wildcard routing using Lua records
-{% if powerdns[env]['zone_template_vars'][item.type]['routing_function'] is defined %}
-*               IN      LUA     CNAME   ";include('_config'); return {{ powerdns[env]['zone_template_vars'][item.type]['routing_function'] }}(qname)"
+{% if item.template_vars.routing_function is defined %}
+*               IN      LUA     CNAME   ";include('_config'); return {{ item.template_vars.routing_function }}(qname)"
 {% endif %}
 
-{% if powerdns[env]['zone_template_vars'][item.type]['debug_function'] is defined %}
+{% if item.template_vars.debug_function is defined %}
 ; Debug endpoint to see routing decisions
-_debug          IN      LUA     TXT     ";include('_config'); return {{ powerdns[env]['zone_template_vars'][item.type]['debug_function'] }}(qname)"
+_debug          IN      LUA     TXT     ";include('_config'); return {{ item.template_vars.debug_function }}(qname)"
 {% endif %}
 {% endif %}
 
-{% if powerdns[env]['zone_template_vars'][item.type]['geo_routing'] | default(false) %}
+{% if item.template_vars.geo_routing | default(false) %}
 ; Geographic routing configuration
 _config         IN      LUA     LUA     "dofile('/opt/pdns/scripts/geo_routing.lua')"
 
@@ -41,11 +41,11 @@ _config         IN      LUA     LUA     "dofile('/opt/pdns/scripts/geo_routing.l
 @               IN      LUA     A       ";include('_config'); return geoRoute(qname)"
 
 ; Health check records for monitoring
-{% for region in powerdns[env]['zone_template_vars'][item.type]['geo_regions'] | default([]) %}
+{% for region in item.template_vars.geo_regions | default([]) %}
 _health.{{ region.name }}    300    IN    TXT    "{{ region.description }} - {{ region.server }} - {{ region.ip }}"
 {% endfor %}
 
-{% if powerdns[env]['zone_template_vars'][item.type]['status_endpoint'] | default(false) %}
+{% if item.template_vars.status_endpoint | default(false) %}
 ; Dynamic status endpoint for monitoring
 _status         IN      LUA     TXT     ";include('_config'); return getServerStatus()"
 {% endif %}
@@ -59,7 +59,7 @@ _status         IN      LUA     TXT     ";include('_config'); return getServerSt
 {% endif %}
 
 ; Standard records (if not using dynamic routing)
-{% if not powerdns[env]['zone_template_vars'][item.type]['lua_routing'] | default(false) and not powerdns[env]['zone_template_vars'][item.type]['geo_routing'] | default(false) %}
+{% if not item.template_vars.lua_routing | default(false) and not item.template_vars.geo_routing | default(false) %}
 {% if a_records is defined %}
 ; A records
 {% for record in a_records %}

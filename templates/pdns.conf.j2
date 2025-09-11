@@ -34,7 +34,7 @@ log-dns-details=yes
 {% if server_role == 'master' %}
 # Security settings - Enable API for certbot
 webserver=yes
-webserver-address={{ powerdns[env].http_api_ip }}
+webserver-address={{ hostvars[inventory_hostname]['health_check_bind_address'] | default(ansible_host) }}
 webserver-port=8081
 webserver-allow-from=127.0.0.1,{{ powerdns.cert_server_ip }}
 api=yes
@@ -79,7 +79,13 @@ secondary=no
 allow-axfr-ips=127.0.0.1
 
 # Notify slaves when zones change
-also-notify={{ powerdns[env].slave_ips | join(',') }}
+{% set slave_ips = [] %}
+{% for host in groups[group_names[0]] %}
+  {% if hostvars[host]['pdns_role'] == 'slave' %}
+    {% set _ = slave_ips.append(hostvars[host]['public_ip'] | default(hostvars[host]['ansible_host'])) %}
+  {% endif %}
+{% endfor %}
+also-notify={{ slave_ips | join(',') }}
 
 # Enable DNS updates for ACME challenges
 dnsupdate=yes

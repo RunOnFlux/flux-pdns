@@ -2,15 +2,20 @@
 # This file specifies which master server to replicate from with TSIG authentication
 
 {% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
-{% set zones = powerdns[env].zones %}
-{% set master_ip = powerdns[env].master_ip %}
+{% set zones = powerdns[env].zone_configs | map(attribute='domain') | list %}
+{% set ns = namespace(master_ip='') %}
+{% for host in groups[group_names[0]] %}
+  {% if hostvars[host]['pdns_role'] == 'master' %}
+    {% set ns.master_ip = hostvars[host]['public_ip'] | default(hostvars[host]['ansible_host']) %}
+  {% endif %}
+{% endfor %}
 
 # Configure zones from master server with TSIG authentication
 {% for zone in zones %}
 # Zone: {{ zone }}
 [{{ zone }}]
 type=slave
-master={{ master_ip }}:53
+master={{ ns.master_ip }}:53
 tsig-algo=hmac-sha256
 tsig-secret={{ powerdns[env].tsig_zone_transfer_key }}
 tsig-name=zone-transfer

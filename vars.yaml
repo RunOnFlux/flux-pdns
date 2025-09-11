@@ -4,109 +4,76 @@ powerdns:
   cert_server_ip: "10.100.0.172"
 
   staging:
-    zones:
-      - cdn-geodev.runonflux.io
-      - app2.runonflux.io
     zone_configs:
-      - { domain: "cdn-geodev.runonflux.io", type: "geo" }
-      - { domain: "app2.runonflux.io", type: "app" }
+      - domain: "cdn-geodev.runonflux.io"
+        type: "geo"
+        template_vars:
+          default_ttl: "300"
+          geo_routing: true
+          lua_routing: false
+          geo_regions:
+            - name: "us-west"
+              description: "West Coast USA"
+              server: "cdn-6.runonflux.io"
+              ip: "107.152.47.137"
+            - name: "eu-west"
+              description: "France EU"
+              server: "cdn-1.runonflux.io"
+              ip: "5.39.57.50"
+            - name: "asia-east"
+              description: "Hong Kong Asia"
+              server: "cdn-12.runonflux.io"
+              ip: "114.29.237.116"
+      - domain: "app2.runonflux.io"
+        type: "app"
+        template_vars:
+          default_ttl: "3600"
+          lua_routing: true
+          geo_routing: false
+          routing_script: "app_routing.lua"
+          routing_function: "appRouteCname"
+          debug_function: "appRouteDebug"
     soa_nameserver: "pdns2.runonflux.io."
     soa_email: "hostmaster.runonflux.io."
     nameservers: ["pdns2.runonflux.io."]
-    health_check:
-      enabled: true
-      bind_address: "10.100.0.154"
-      port: 3000
-    zone_template_vars:
-      geo:
-        default_ttl: "300"
-        geo_routing: true
-        lua_routing: false
-        geo_regions:
-          - {
-              name: "us-west",
-              description: "West Coast USA",
-              server: "cdn-6.runonflux.io",
-              ip: "107.152.47.137",
-            }
-          - {
-              name: "eu-west",
-              description: "France EU",
-              server: "cdn-1.runonflux.io",
-              ip: "5.39.57.50",
-            }
-          - {
-              name: "asia-east",
-              description: "Hong Kong Asia",
-              server: "cdn-12.runonflux.io",
-              ip: "114.29.237.116",
-            }
-      app:
-        default_ttl: "3600"
-        lua_routing: true
-        geo_routing: false
-        routing_script: "app_routing.lua"
-        routing_function: "appRouteCname"
-        debug_function: "appRouteDebug"
-    master_ip: "5.39.57.39"
-    slave_ips:
-      - "5.161.41.40"
-    http_api_ip: "10.100.0.154"
     # TSIG key for zone transfers (generate with: openssl rand -base64 48)
     tsig_zone_transfer_key: "REPLACE_WITH_STAGING_ZONE_TRANSFER_KEY"
     # API key for certbot (generate with: openssl rand -base64 32)
     api_key: "REPLACE_WITH_STAGING_API_KEY"
 
   production:
-    zones:
-      - cdn-geo.runonflux.io
-      - app.runonflux.io
     zone_configs:
-      - { domain: "cdn-geo.runonflux.io", type: "geo" }
-      - { domain: "app.runonflux.io", type: "app" }
+      - domain: "cdn-geo.runonflux.io"
+        type: "geo"
+        template_vars:
+          default_ttl: "300"
+          geo_routing: true
+          lua_routing: false
+          geo_regions:
+            - name: "us-west"
+              description: "West Coast USA"
+              server: "cdn-6.runonflux.io"
+              ip: "107.152.47.137"
+            - name: "eu-west"
+              description: "France EU"
+              server: "cdn-1.runonflux.io"
+              ip: "5.39.57.50"
+            - name: "asia-east"
+              description: "Hong Kong Asia"
+              server: "cdn-12.runonflux.io"
+              ip: "114.29.237.116"
+      - domain: "app.runonflux.io"
+        type: "app"
+        template_vars:
+          default_ttl: "3600"
+          lua_routing: true
+          geo_routing: false
+          routing_script: "app_routing.lua"
+          routing_function: "appRouteCname"
+          debug_function: "appRouteDebug"
     soa_nameserver: "pdns1.runonflux.io."
     soa_email: "hostmaster.runonflux.io."
     nameservers: ["pdns1.runonflux.io."]
-    health_check:
-      enabled: true
-      bind_address: "10.100.0.153"
-      port: 3000
-    zone_template_vars:
-      geo:
-        default_ttl: "300"
-        geo_routing: true
-        lua_routing: false
-        geo_regions:
-          - {
-              name: "us-west",
-              description: "West Coast USA",
-              server: "cdn-6.runonflux.io",
-              ip: "107.152.47.137",
-            }
-          - {
-              name: "eu-west",
-              description: "France EU",
-              server: "cdn-1.runonflux.io",
-              ip: "5.39.57.50",
-            }
-          - {
-              name: "asia-east",
-              description: "Hong Kong Asia",
-              server: "cdn-12.runonflux.io",
-              ip: "114.29.237.116",
-            }
-      app:
-        default_ttl: "3600"
-        lua_routing: true
-        geo_routing: false
-        routing_script: "app_routing.lua"
-        routing_function: "appRouteCname"
-        debug_function: "appRouteDebug"
-    master_ip: "5.39.57.38"
-    slave_ips:
-      - "5.161.203.77"
-      - "178.128.30.247"
-    http_api_ip: "10.100.0.153"
     # TSIG key for zone transfers (generate with: openssl rand -base64 48)
     tsig_zone_transfer_key: "REPLACE_WITH_PRODUCTION_ZONE_TRANSFER_KEY"
     # API key for certbot (generate with: openssl rand -base64 32)

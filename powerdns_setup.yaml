@@ -4,6 +4,8 @@
   become: yes
   vars_files:
     - vars.yaml
+  vars:
+    env: "{{ 'staging' if DEPLOY_ENV == 'staging' else 'production' }}"
 
   handlers:
     - name: restart powerdns
@@ -21,13 +23,28 @@
         enabled: yes
       listen: "restart dns-healthcheck"
       when:
-        - pdns_role == 'master'
-        - powerdns[env].health_check.enabled | default(false)
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
 
   tasks:
     - name: Set environment variable
       ansible.builtin.set_fact:
         env: "{{ 'staging' if DEPLOY_ENV == 'staging' else 'production' }}"
+
+    - name: Set derived host IPs
+      ansible.builtin.set_fact:
+        master_ip: "{{ hostvars[item]['public_ip'] | default(hostvars[item]['ansible_host']) }}"
+      loop: "{{ groups[group_names[0]] }}"
+      when: hostvars[item]['pdns_role'] == 'master'
+
+    - name: Set derived slave IPs
+      ansible.builtin.set_fact:
+        slave_ips: "{{ slave_ips | default([]) + [hostvars[item]['public_ip'] | default(hostvars[item]['ansible_host'])] }}"
+      loop: "{{ groups[group_names[0]] }}"
+      when: hostvars[item]['pdns_role'] == 'slave'
+
+    - name: Set API IP
+      ansible.builtin.set_fact:
+        api_ip: "{{ hostvars[inventory_hostname]['health_check_bind_address'] | default(ansible_host) }}"
 
     - name: Create apt keyrings directory
       ansible.builtin.file:
@@ -177,8 +194,7 @@
         - /opt/healthchecker/src/routes
         - /opt/healthchecker/src/bin
       when:
-        - pdns_role == 'master'
-        - powerdns[env].health_check.enabled | default(false)
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
 
     - name: Copy health checker application files
       ansible.builtin.copy:
@@ -188,8 +204,7 @@
         group: root
         mode: preserve
       when:
-        - pdns_role == 'master'
-        - powerdns[env].health_check.enabled | default(false)
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
 
     - name: Template geo_routing.lua script
       ansible.builtin.template:
@@ -207,8 +222,7 @@
         group: root
         mode: "0644"
       when:
-        - pdns_role == 'master'
-        - powerdns[env].health_check.enabled | default(false)
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
       notify: restart dns-healthcheck
 
     - name: Generate health checker route handler
@@ -221,8 +235,7 @@
       vars:
         subdomain: "{{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}"
       when:
-        - pdns_role == 'master'
-        - powerdns[env].health_check.enabled | default(false)
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
       notify: restart dns-healthcheck
 
     - name: Install health checker npm dependencies
@@ -230,8 +243,7 @@
         path: /opt/healthchecker/src
         state: present
       when:
-        - pdns_role == 'master'
-        - powerdns[env].health_check.enabled | default(false)
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
 
     - name: Create DNS health check systemd service
       ansible.builtin.copy:
@@ -241,21 +253,21 @@
         group: root
         mode: "0644"
       when:
-        - pdns_role == 'master'
-        - powerdns[env].health_check.enabled | default(false)
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
 
     - name: Reload systemd daemon for DNS health check
       ansible.builtin.systemd:
         daemon_reload: yes
       when:
-        - pdns_role == 'master'
-        - powerdns[env].health_check.enabled | default(false)
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
 
     - name: Start and enable DNS health check service
       ansible.builtin.systemd:
         name: dns-healthcheck
-        state: "{{ 'started' if (pdns_role == 'master' and powerdns[env].health_check.enabled | default(false)) else 'stopped' }}"
-        enabled: "{{ pdns_role == 'master' and powerdns[env].health_check.enabled | default(false) }}"
+        state: started
+        enabled: yes
+      when:
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
 
     # PowerDNS configuration
     - name: Create PowerDNS zones directory
@@ -353,7 +365,7 @@
 
     - name: Create missing secondary zones (slave)
       ansible.builtin.shell: |
-        pdnsutil create-secondary-zone {{ zone_result.zone.domain }} {{ powerdns[env].master_ip }}
+        pdnsutil create-secondary-zone {{ zone_result.zone.domain }} {{ master_ip }}
         pdnsutil activate-tsig-key {{ zone_result.zone.domain }} zone-transfer secondary
       loop: "{{ zone_checks.results }}"
       loop_control:
@@ -389,7 +401,7 @@
         else
           echo "OK"
         fi
-      loop: "{{ powerdns[env].zones }}"
+      loop: "{{ powerdns[env].zone_configs | map(attribute='domain') | list }}"
       when: pdns_role == 'master'
       register: tsig_metadata_result
       changed_when: "'CHANGED' in tsig_metadata_result.stdout"
@@ -404,7 +416,7 @@
         else
           echo "OK"
         fi
-      loop: "{{ powerdns[env].zones }}"
+      loop: "{{ powerdns[env].zone_configs | map(attribute='domain') | list }}"
       when: pdns_role == 'master'
       register: notify_tsig_result
       changed_when: "'CHANGED' in notify_tsig_result.stdout"
@@ -413,14 +425,14 @@
     - name: Configure ALSO-NOTIFY for zone-level notifications
       ansible.builtin.shell: |
         current_value=$(pdnsutil get-meta "{{ item }}" ALSO-NOTIFY 2>/dev/null | grep "^ALSO-NOTIFY" | cut -d'=' -f2 | xargs)
-        expected_value="{{ powerdns[env].slave_ips | join(',') }}"
+        expected_value="{{ slave_ips | join(',') }}"
         if [ "$current_value" != "$expected_value" ]; then
-          pdnsutil set-meta "{{ item }}" ALSO-NOTIFY {{ powerdns[env].slave_ips | join(',') }}
+          pdnsutil set-meta "{{ item }}" ALSO-NOTIFY {{ slave_ips | join(',') }}
           echo "CHANGED"
         else
           echo "OK"
         fi
-      loop: "{{ powerdns[env].zones }}"
+      loop: "{{ powerdns[env].zone_configs | map(attribute='domain') | list }}"
       when: pdns_role == 'master'
       register: also_notify_result
       changed_when: "'CHANGED' in also_notify_result.stdout"
@@ -435,7 +447,7 @@
         else
           echo "OK"
         fi
-      loop: "{{ powerdns[env].zones }}"
+      loop: "{{ powerdns[env].zone_configs | map(attribute='domain') | list }}"
       when: pdns_role == 'master'
       register: soa_edit_result
       changed_when: "'CHANGED' in soa_edit_result.stdout"
@@ -450,7 +462,7 @@
         else
           echo "OK"
         fi
-      loop: "{{ powerdns[env].zones }}"
+      loop: "{{ powerdns[env].zone_configs | map(attribute='domain') | list }}"
       when: pdns_role == 'master'
       register: soa_edit_api_result
       changed_when: "'CHANGED' in soa_edit_api_result.stdout"
@@ -464,7 +476,7 @@
           pdnsutil set-kind "{{ item }}" MASTER
           echo "CHANGED"
         fi
-      loop: "{{ powerdns[env].zones }}"
+      loop: "{{ powerdns[env].zone_configs | map(attribute='domain') | list }}"
       when: pdns_role == 'master'
       register: zone_kind_result
       changed_when: "'CHANGED' in zone_kind_result.stdout"
@@ -507,8 +519,8 @@
 
     - name: Allow PowerDNS API access from cert server
       ansible.builtin.shell: |
-        if ! ufw status numbered | grep -q "{{ powerdns[env].http_api_ip }} 8081/tcp.*ALLOW IN.*{{ powerdns.cert_server_ip }}"; then
-          ufw allow from {{ powerdns.cert_server_ip }} to {{ powerdns[env].http_api_ip }} port 8081 proto tcp comment 'PowerDNS API from cert server'
+        if ! ufw status numbered | grep -q "{{ api_ip }} 8081/tcp.*ALLOW IN.*{{ powerdns.cert_server_ip }}"; then
+          ufw allow from {{ powerdns.cert_server_ip }} to {{ api_ip }} port 8081 proto tcp comment 'PowerDNS API from cert server'
           echo "CHANGED"
         else
           echo "OK"
@@ -568,7 +580,7 @@
 
     # Master/Slave replication validation
     - name: Test zone transfer from master (slave servers only)
-      command: dig @{{ powerdns[env].master_ip }} {{ 'cdn-geodev.runonflux.io' if DEPLOY_ENV == 'staging' else 'cdn-geo.runonflux.io' }} AXFR
+      command: dig @{{ master_ip }} {{ 'cdn-geodev.runonflux.io' if DEPLOY_ENV == 'staging' else 'cdn-geo.runonflux.io' }} AXFR
       register: axfr_test
       retries: 3
       delay: 10
