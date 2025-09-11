@@ -5,6 +5,20 @@
   vars_files:
     - vars.yaml
 
+  handlers:
+    - name: restart powerdns
+      ansible.builtin.systemd:
+        name: pdns
+        state: restarted
+        enabled: yes
+      listen: "restart pdns"
+
+    - name: reload powerdns
+      ansible.builtin.systemd:
+        name: pdns
+        state: reloaded
+      listen: "reload pdns"
+
   tasks:
     - name: Create apt keyrings directory
       ansible.builtin.file:
@@ -111,10 +125,17 @@
         group: root
         mode: "0600"
 
+    - name: Check GeoIP database age
+      ansible.builtin.stat:
+        path: /usr/share/GeoIP/GeoLite2-City.mmdb
+      register: geoip_db_stat
+
     - name: Run initial GeoIP database update
       command: /usr/bin/geoipupdate
       register: geoip_update
       failed_when: geoip_update.rc != 0
+      when: not geoip_db_stat.stat.exists or ((ansible_date_time.epoch | int) - geoip_db_stat.stat.mtime) > 604800
+      changed_when: geoip_update.rc == 0
 
     - name: Verify GeoIP databases exist
       ansible.builtin.stat:
@@ -196,6 +217,7 @@
         owner: root
         group: root
         mode: "0644"
+      notify: restart pdns
         backup: yes
 
     # SQLite3 backend database setup
@@ -251,6 +273,7 @@
         group: root
         mode: "0644"
       when: DEPLOY_ENV == 'production'
+      notify: reload pdns
 
     - name: Copy zone file for geo-routing (staging)
       ansible.builtin.copy:
@@ -260,6 +283,7 @@
         group: root
         mode: "0644"
       when: DEPLOY_ENV == 'staging'
+      notify: reload pdns
 
     - name: Copy zone file for app routing (production)
       ansible.builtin.copy:
@@ -269,6 +293,7 @@
         group: root
         mode: "0644"
       when: DEPLOY_ENV == 'production'
+      notify: reload pdns
 
     - name: Copy zone file for app routing (staging)
       ansible.builtin.copy:
@@ -278,6 +303,7 @@
         group: root
         mode: "0644"
       when: DEPLOY_ENV == 'staging'
+      notify: reload pdns
 
     # Zone migration from BIND to SQLite3 using zone2sql
     - name: Check if zones are already imported
@@ -290,6 +316,7 @@
       ansible.builtin.shell: |
         zone2sql --named-conf=/etc/powerdns/named.conf --gsqlite | sqlite3 /var/lib/powerdns/pdns.sqlite3
       when: zone_count.stdout | int == 0 and pdns_role == 'master'
+      notify: restart pdns
 
     - name: Create secondary zones on slave servers
       ansible.builtin.shell: |
@@ -314,54 +341,97 @@
       ansible.builtin.shell: |
         pdnsutil import-tsig-key zone-transfer hmac-sha256 "{{ powerdns[env].tsig_zone_transfer_key }}"
       when: "'zone-transfer' not in tsig_key_exists.stdout"
+      notify: reload pdns
 
     - name: Configure TSIG metadata for domains
       ansible.builtin.shell: |
-        if ! pdnsutil get-meta "{{ item }}" TSIG-ALLOW-AXFR | grep -q "zone-transfer"; then
+        current_value=$(pdnsutil get-meta "{{ item }}" TSIG-ALLOW-AXFR 2>/dev/null || echo "")
+        if [ "$current_value" != "zone-transfer" ]; then
           pdnsutil set-meta "{{ item }}" TSIG-ALLOW-AXFR zone-transfer
+          echo "CHANGED"
+        else
+          echo "OK"
         fi
       loop: "{{ powerdns[env].zones }}"
       when: pdns_role == 'master'
+      register: tsig_metadata_result
+      changed_when: "'CHANGED' in tsig_metadata_result.stdout"
+      notify: reload pdns
 
     - name: Configure TSIG for NOTIFY packets
       ansible.builtin.shell: |
-        if ! pdnsutil get-meta "{{ item }}" NOTIFY-DNSUPDATE | grep -q "zone-transfer"; then
+        current_value=$(pdnsutil get-meta "{{ item }}" NOTIFY-DNSUPDATE 2>/dev/null || echo "")
+        if [ "$current_value" != "zone-transfer" ]; then
           pdnsutil set-meta "{{ item }}" NOTIFY-DNSUPDATE zone-transfer
+          echo "CHANGED"
+        else
+          echo "OK"
         fi
       loop: "{{ powerdns[env].zones }}"
       when: pdns_role == 'master'
+      register: notify_tsig_result
+      changed_when: "'CHANGED' in notify_tsig_result.stdout"
+      notify: reload pdns
 
     - name: Configure ALSO-NOTIFY for zone-level notifications
       ansible.builtin.shell: |
-        if ! pdnsutil get-meta "{{ item }}" ALSO-NOTIFY | grep -q "{{ powerdns[env].slave_ips | join(',') }}"; then
+        current_value=$(pdnsutil get-meta "{{ item }}" ALSO-NOTIFY 2>/dev/null || echo "")
+        expected_value="{{ powerdns[env].slave_ips | join(',') }}"
+        if [ "$current_value" != "$expected_value" ]; then
           pdnsutil set-meta "{{ item }}" ALSO-NOTIFY {{ powerdns[env].slave_ips | join(',') }}
+          echo "CHANGED"
+        else
+          echo "OK"
         fi
       loop: "{{ powerdns[env].zones }}"
       when: pdns_role == 'master'
+      register: also_notify_result
+      changed_when: "'CHANGED' in also_notify_result.stdout"
+      notify: reload pdns
 
     - name: Configure SOA-EDIT for serial increments
       ansible.builtin.shell: |
-        if ! pdnsutil get-meta "{{ item }}" SOA-EDIT | grep -q "INCEPTION-INCREMENT"; then
+        current_value=$(pdnsutil get-meta "{{ item }}" SOA-EDIT 2>/dev/null || echo "")
+        if [ "$current_value" != "INCEPTION-INCREMENT" ]; then
           pdnsutil set-meta "{{ item }}" SOA-EDIT INCEPTION-INCREMENT
+          echo "CHANGED"
+        else
+          echo "OK"
         fi
       loop: "{{ powerdns[env].zones }}"
       when: pdns_role == 'master'
+      register: soa_edit_result
+      changed_when: "'CHANGED' in soa_edit_result.stdout"
+      notify: reload pdns
 
     - name: Configure SOA-EDIT-API for certbot compatibility
       ansible.builtin.shell: |
-        if ! pdnsutil get-meta "{{ item }}" SOA-EDIT-API | grep -q "DEFAULT"; then
+        current_value=$(pdnsutil get-meta "{{ item }}" SOA-EDIT-API 2>/dev/null || echo "")
+        if [ "$current_value" != "DEFAULT" ]; then
           pdnsutil set-meta "{{ item }}" SOA-EDIT-API DEFAULT
+          echo "CHANGED"
+        else
+          echo "OK"
         fi
       loop: "{{ powerdns[env].zones }}"
       when: pdns_role == 'master'
+      register: soa_edit_api_result
+      changed_when: "'CHANGED' in soa_edit_api_result.stdout"
+      notify: reload pdns
 
     - name: Set zone kind to MASTER for automatic NOTIFY
       ansible.builtin.shell: |
-        if ! pdnsutil show-zone "{{ item }}" | grep -q "This is a Master zone"; then
+        if pdnsutil show-zone "{{ item }}" 2>/dev/null | grep -q "This is a Master zone"; then
+          echo "OK"
+        else
           pdnsutil set-kind "{{ item }}" MASTER
+          echo "CHANGED"
         fi
       loop: "{{ powerdns[env].zones }}"
       when: pdns_role == 'master'
+      register: zone_kind_result
+      changed_when: "'CHANGED' in zone_kind_result.stdout"
+      notify: reload pdns
 
     # Scripts directory setup
     - name: Ensure /opt/pdns/scripts directory exists
@@ -382,6 +452,7 @@
         owner: root
         group: root
         mode: "0644"
+      notify: reload pdns
 
     - name: Copy Lua app-routing script
       ansible.builtin.copy:
@@ -390,6 +461,7 @@
         owner: root
         group: root
         mode: "0644"
+      notify: reload pdns
 
     # Logrotate configuration
     - name: Copy PowerDNS logrotate configuration
@@ -411,8 +483,13 @@
       ansible.builtin.shell: |
         if ! ufw status numbered | grep -q "{{ powerdns.cert_server_ip }}.*{{ powerdns[env].http_api_ip }}.*8081"; then
           ufw allow from {{ powerdns.cert_server_ip }} to {{ powerdns[env].http_api_ip }} port 8081 proto tcp comment 'PowerDNS API from cert server'
+          echo "CHANGED"
+        else
+          echo "OK"
         fi
       when: pdns_role == 'master'
+      register: ufw_result
+      changed_when: "'CHANGED' in ufw_result.stdout"
 
     # Service management
     - name: Validate PowerDNS configuration
@@ -421,12 +498,11 @@
       failed_when: config_check.rc != 0
       changed_when: false
 
-    - name: Restart PowerDNS service
+    - name: Ensure PowerDNS service is started and enabled
       ansible.builtin.systemd:
         name: pdns
-        state: restarted
+        state: started
         enabled: yes
-      when: config_check.rc == 0
 
     - name: Ensure logrotate runs daily
       ansible.builtin.cron:
