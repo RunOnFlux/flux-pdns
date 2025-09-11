@@ -12,14 +12,7 @@
         state: restarted
         enabled: yes
       listen: "restart pdns"
-
-    - name: wait for powerdns
-      wait_for:
-        port: 53
-        host: 127.0.0.1
-        delay: 5
-        timeout: 30
-      listen: "restart pdns"
+      register: pdns_restarted
 
   tasks:
     - name: Create apt keyrings directory
@@ -505,6 +498,15 @@
         name: pdns
         state: started
         enabled: yes
+      register: pdns_started
+
+    - name: Wait for PowerDNS to start
+      wait_for:
+        port: 53
+        host: 127.0.0.1
+        delay: 5
+        timeout: 30
+      when: (pdns_restarted is defined and pdns_restarted.changed) or (pdns_started.changed)
 
     - name: Ensure logrotate runs daily
       ansible.builtin.cron:
