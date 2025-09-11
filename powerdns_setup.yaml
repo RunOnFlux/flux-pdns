@@ -445,8 +445,8 @@
     - name: Configure SOA-EDIT-API for HTTP API incrementation
       ansible.builtin.shell: |
         current_value=$(pdnsutil get-meta "{{ item }}" SOA-EDIT-API 2>/dev/null | grep "^SOA-EDIT-API" | cut -d'=' -f2 | xargs)
-        if [ "$current_value" != "INCEPTION-INCREMENT" ]; then
-          pdnsutil set-meta "{{ item }}" SOA-EDIT-API INCEPTION-INCREMENT
+        if [ "$current_value" != "DEFAULT" ]; then
+          pdnsutil set-meta "{{ item }}" SOA-EDIT-API DEFAULT
           echo "CHANGED"
         else
           echo "OK"
