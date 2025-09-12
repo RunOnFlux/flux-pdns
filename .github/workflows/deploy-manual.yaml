@@ -1,0 +1,86 @@
+name: Manually Deploy on Development
+
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: Choose target type
+        options:
+          - all
+          - single_host
+        default: all
+        type: choice
+        required: true
+      host:
+        description: Host (optional)
+        type: string
+      host_ip:
+        description: Host IP (optional)
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel if values not set
+        if: "${{ (github.event.inputs.targets == 'single_host') && ! github.event.inputs.host }}"
+        run: exit 1
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          token: ${{ github.token }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      # dev hosts should have dns entries
+      - name: Add temp dev host to /etc/hosts
+        run: >
+          sudo bash -c "echo \"${{ github.event.inputs.host_ip }}
+          ${{ github.event.inputs.host }}.runonflux.io\" >>
+          /etc/hosts"
+        if: github.event.inputs.host && github.event.inputs.host_ip
+
+      - name: Set up SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+
+        run: echo "$SSH_PRIVATE_KEY" > privatekey && chmod 0400 privatekey
+
+      - name: Run Deployment on all dev hosts
+        if: ${{ github.event.inputs.targets == 'all' }}
+        env:
+          MAXMIND_ACCOUNT_ID: ${{ secrets.MAXMIND_ACCOUNT_ID }}
+          MAXMIND_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
+          TSIG_STAGING_ZONE_TRANSFER_KEY: ${{ secrets.TSIG_STAGING_ZONE_TRANSFER_KEY }}
+          PDNS_API_STAGING_KEY: ${{ secrets.PDNS_API_STAGING_KEY }}
+        run: >
+          ansible-playbook -i hosts.yaml
+            -e "DEPLOY_ENV=staging"
+            -e "maxmind.account_id=$MAXMIND_ACCOUNT_ID"
+            -e "maxmind.license_key=$MAXMIND_LICENSE_KEY"
+            -e "powerdns.staging.tsig_zone_transfer_key=$TSIG_STAGING_ZONE_TRANSFER_KEY"
+            -e "powerdns.staging.api_key=$PDNS_API_STAGING_KEY"
+            powerdns_setup.yaml
+
+      - name: Run Deployment on single dev host
+        if: ${{ github.event.inputs.targets == 'single_host' }}
+        env:
+          MAXMIND_ACCOUNT_ID: ${{ secrets.MAXMIND_ACCOUNT_ID }}
+          MAXMIND_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
+          TSIG_STAGING_ZONE_TRANSFER_KEY: ${{ secrets.TSIG_STAGING_ZONE_TRANSFER_KEY }}
+          PDNS_API_STAGING_KEY: ${{ secrets.PDNS_API_STAGING_KEY }}
+        run: >
+          ansible-playbook
+            --limit ${{ github.event.inputs.host }}
+            -e "DEPLOY_ENV=staging"
+            -e "maxmind.account_id=$MAXMIND_ACCOUNT_ID"
+            -e "maxmind.license_key=$MAXMIND_LICENSE_KEY"
+            -e "powerdns.staging.tsig_zone_transfer_key=$TSIG_STAGING_ZONE_TRANSFER_KEY"
+            -e "powerdns.staging.api_key=$PDNS_API_STAGING_KEY"
+            powerdns_setup.yaml
