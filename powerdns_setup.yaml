@@ -541,7 +541,7 @@
 
     - name: Warm up Lua geo-routing functions after PowerDNS restart
       ansible.builtin.command:
-        cmd: dig @127.0.0.1 {{ item.domain }} A +short
+        cmd: dig @{{ hostvars[inventory_hostname]['public_ip'] | default(ansible_host) }} {{ item.domain }} A +short
       loop: "{{ powerdns[env].zone_configs }}"
       when:
         - ((pdns_restarted is defined and pdns_restarted.changed) or (pdns_started.changed))
