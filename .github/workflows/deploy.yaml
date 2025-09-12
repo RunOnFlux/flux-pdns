@@ -35,7 +35,7 @@ jobs:
           echo "  StrictHostKeyChecking no" >> ~/.ssh/config
           echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
 
-      - name: Run Deployment on all dev hosts
+      - name: Run Deployment on all selected hosts
         env:
           DEPLOY_ENV: ${{ github.event_name == 'release' && 'production' || 'staging' }}
           MAXMIND_ACCOUNT_ID: ${{ secrets.MAXMIND_ACCOUNT_ID }}
