@@ -38,7 +38,7 @@ _debug          IN      LUA     TXT     ";include('_config'); return {{ item.tem
 _config         IN      LUA     LUA     "dofile('/opt/pdns/scripts/geo_routing.lua')"
 
 ; Main geographic routing record
-@               IN      LUA     A       ";include('_config'); return geoRoute(qname)"
+@               IN      LUA     A       ";include('_config'); return geoRoute()"
 
 ; Health check records for monitoring
 {% for region in item.template_vars.geo_regions | default([]) %}
