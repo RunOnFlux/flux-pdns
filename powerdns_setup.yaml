@@ -30,7 +30,6 @@
       ansible.builtin.set_fact:
         env: "{{ 'staging' if DEPLOY_ENV == 'staging' else 'production' }}"
 
-
     - name: Set API IP
       ansible.builtin.set_fact:
         api_ip: "{{ hostvars[inventory_hostname]['health_check_bind_address'] | default(ansible_host) }}"
@@ -539,6 +538,16 @@
         delay: 5
         timeout: 30
       when: (pdns_restarted is defined and pdns_restarted.changed) or (pdns_started.changed)
+
+    - name: Warm up Lua geo-routing functions after PowerDNS restart
+      ansible.builtin.command:
+        cmd: dig @127.0.0.1 {{ item.domain }} A +short
+      loop: "{{ powerdns[env].zone_configs }}"
+      when:
+        - ((pdns_restarted is defined and pdns_restarted.changed) or (pdns_started.changed))
+        - item.template_vars.geo_routing | default(false)
+      failed_when: false
+      changed_when: false
 
     - name: Ensure logrotate runs daily
       ansible.builtin.cron:
