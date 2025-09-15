@@ -186,7 +186,7 @@
 
     - name: Copy health checker application files
       ansible.builtin.copy:
-        src: src/
+        src: files/healthcheck/
         dest: /opt/healthchecker/src/
         owner: root
         group: root
@@ -213,10 +213,23 @@
         - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
       notify: restart dns-healthcheck
 
-    - name: Generate health checker route handler
+    - name: Generate simple health checker route handler
+      ansible.builtin.template:
+        src: templates/health-simple.js.j2
+        dest: /opt/healthchecker/src/routes/health-simple.js
+        owner: root
+        group: root
+        mode: 0644
+      vars:
+        subdomain: "{{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}"
+      when:
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+      notify: restart dns-healthcheck
+
+    - name: Generate detailed health checker route handler
       ansible.builtin.template:
         src: templates/health.js.j2
-        dest: /opt/healthchecker/src/routes/health.js
+        dest: /opt/healthchecker/src/routes/healthdetail.js
         owner: root
         group: root
         mode: 0644

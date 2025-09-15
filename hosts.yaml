@@ -8,7 +8,7 @@ app2:
       pdns_role: master
       public_ip: 5.39.57.39
       health_check_enabled: true
-      health_check_bind_address: 10.100.0.154
+      health_check_bind_address: 0.0.0.0
       health_check_port: 3000
       api_enabled: true
     pdns-staging-us1:
@@ -16,6 +16,9 @@ app2:
       ansible_user: root
       pdns_role: slave
       # public_ip same as ansible_host for this server
+      health_check_enabled: true
+      health_check_bind_address: 0.0.0.0
+      health_check_port: 3000
 
 app:
   hosts:
@@ -25,7 +28,7 @@ app:
       pdns_role: master
       public_ip: 5.39.57.38
       health_check_enabled: true
-      health_check_bind_address: 10.100.0.153
+      health_check_bind_address: 0.0.0.0
       health_check_port: 3000
       api_enabled: true
     pdns-prod-us1:
@@ -33,8 +36,14 @@ app:
       ansible_user: root
       pdns_role: slave
       # public_ip same as ansible_host for this server
+      health_check_enabled: true
+      health_check_bind_address: 0.0.0.0
+      health_check_port: 3000
     pdns-prod-sg1:
       ansible_host: 178.128.30.247
       ansible_user: root
       pdns_role: slave
       # public_ip same as ansible_host for this server
+      health_check_enabled: true
+      health_check_bind_address: 0.0.0.0
+      health_check_port: 3000
