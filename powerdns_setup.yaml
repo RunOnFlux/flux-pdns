@@ -530,6 +530,18 @@
       register: ufw_result
       changed_when: "'CHANGED' in ufw_result.stdout"
 
+    - name: Allow health check access from anywhere
+      ansible.builtin.shell: |
+        if ! ufw status numbered | grep -q "3000/tcp.*ALLOW IN.*Anywhere"; then
+          ufw allow 3000/tcp comment 'Health check service'
+          echo "CHANGED"
+        else
+          echo "OK"
+        fi
+      when: hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+      register: ufw_health_result
+      changed_when: "'CHANGED' in ufw_health_result.stdout"
+
     # Service management
     - name: Validate PowerDNS configuration
       command: pdns_server --config=check
