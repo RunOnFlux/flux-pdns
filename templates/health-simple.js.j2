@@ -1,0 +1,27 @@
+var express = require('express');
+var router = express.Router();
+const { Resolver } = require('node:dns');
+const { promisify } = require('util');
+
+const resolver = new Resolver();
+resolver.setServers(['127.0.0.1']);
+
+// Promisify DNS resolver method
+const resolveCname = promisify(resolver.resolveCname.bind(resolver));
+
+// Configuration based on environment
+const config = {
+  app_domain: '{{ subdomain }}.runonflux.io'
+};
+
+// Simple health endpoint for web.app domain resolution
+router.get('/', async (req, res) => {
+  try {
+    const addresses = await resolveCname(`web.${config.app_domain}`);
+    return res.status(200).json(addresses);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+module.exports = router;
