@@ -8,9 +8,9 @@ launch=gsqlite3,geoip
 gsqlite3-database=/var/lib/powerdns/pdns.sqlite3
 gsqlite3-dnssec=yes
 
-# Enable Lua records for geo-routing
-enable-lua-records=yes
-lua-health-checks-interval=2
+# Enable Lua records for geo-routing with shared state for consistent health checks
+enable-lua-records=shared
+lua-health-checks-interval=60
 
 # GeoIP configuration for Lua Records (MMDB format)
 geoip-database-files=mmdb:/usr/share/GeoIP/GeoLite2-City.mmdb;mode=mmap;language=en
