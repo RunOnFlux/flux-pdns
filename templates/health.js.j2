@@ -176,6 +176,16 @@ async function testBasicDns() {
   return result;
 }
 
+// Simple health endpoint for web.app domain resolution
+router.get('/health', async (req, res) => {
+  try {
+    const addresses = await resolveCname(`web.${config.app_domain}`);
+    return res.status(200).json(addresses);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Main health check endpoint
 router.get('/', async (req, res) => {
   const healthResult = {
