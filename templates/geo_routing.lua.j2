@@ -22,23 +22,6 @@ servers = {
 {% endfor %}
 }
 
--- Track server recovery times (servers that were down and came back up)
--- Format: recovery_times[ip] = timestamp when server came back online
-recovery_times = {}
-
--- Track server states across queries for proper quarantine management
--- Format: server_states[ip] = 'healthy' | 'down' | 'recovering'
-server_states = {}
-
--- Initialize server states on first run
-function initializeServerStates()
-    local all_ips = getAllServerIPs()
-    for _, ip in ipairs(all_ips) do
-        if server_states[ip] == nil then
-            server_states[ip] = 'healthy'  -- Assume healthy initially
-        end
-    end
-end
 
 -- Function to get all server IPs
 function getAllServerIPs()
@@ -49,33 +32,12 @@ function getAllServerIPs()
     return ips
 end
 
--- Function to check if a server has been up for at least 5 minutes after recovery
-function isServerRecovered(ip)
-    local recovery_time = recovery_times[ip]
-    if recovery_time == nil then
-        -- Server hasn't been marked as recovering, so it's available
-        return true
-    end
-
-    -- Check if 5 minutes (300 seconds) have passed since recovery
-    local current_time = os.time()
-    if current_time - recovery_time >= 300 then
-        -- Server has been up for 5 minutes, remove from recovery tracking
-        recovery_times[ip] = nil
-        return true
-    end
-
-    return false
-end
 
 -- Main geo-routing function called by PowerDNS
 function geoRoute()
     local all_ips = getAllServerIPs()
 
-    -- Initialize server states on first run
-    initializeServerStates()
-
-    -- Health check with working parameters (failOnIncompleteCheck causes crashes)
+    -- Health check with working parameters
     local available_ips = ifportup(443, all_ips, {
         timeout = 2,                 -- 2 seconds connection timeout
         minimumFailures = 3,         -- 3 consecutive failures before marking as down
@@ -84,75 +46,9 @@ function geoRoute()
         backupSelector = 'pickclosest' -- Use geographic selection even when all appear down
     })
 
-    -- Update server states and manage recovery times
-    updateServerStates(all_ips, available_ips)
-
-    -- Apply quarantine filtering - remove servers still in 5-minute recovery period
-    local final_ips = applyQuarantineFilter(available_ips)
-
-    -- If quarantine filtering removed all servers, return the unfiltered result
-    -- This prevents complete service failure during recovery periods
-    if #final_ips == 0 then
-        return available_ips
-    end
-
-    return final_ips
+    return available_ips
 end
 
--- Update server states based on current health check results
-function updateServerStates(all_ips, available_ips)
-    local current_time = os.time()
-
-    -- Create lookup table for available IPs
-    local available_lookup = {}
-    for _, ip in ipairs(available_ips) do
-        available_lookup[ip] = true
-    end
-
-    -- Update states for each server
-    for _, ip in ipairs(all_ips) do
-        local previous_state = server_states[ip]
-        local is_available = available_lookup[ip] ~= nil
-
-        if is_available then
-            if previous_state == 'down' then
-                -- Server came back up - start recovery period
-                server_states[ip] = 'recovering'
-                if recovery_times[ip] == nil then
-                    recovery_times[ip] = current_time
-                end
-            elseif previous_state == 'recovering' then
-                -- Check if recovery period is complete (5 minutes = 300 seconds)
-                if recovery_times[ip] and (current_time - recovery_times[ip]) >= 300 then
-                    server_states[ip] = 'healthy'
-                    recovery_times[ip] = nil  -- Clear recovery time
-                end
-                -- else: still in recovery period, keep state as 'recovering'
-            elseif previous_state == 'healthy' or previous_state == nil then
-                server_states[ip] = 'healthy'
-            end
-        else
-            -- Server is not available
-            if previous_state ~= 'down' then
-                server_states[ip] = 'down'
-                recovery_times[ip] = nil  -- Clear any existing recovery time
-            end
-        end
-    end
-end
-
--- Apply quarantine filtering - only return servers that are 'healthy' (not in recovery period)
-function applyQuarantineFilter(available_ips)
-    local healthy_ips = {}
-
-    for _, ip in ipairs(available_ips) do
-        if server_states[ip] == 'healthy' then
-            table.insert(healthy_ips, ip)
-        end
-    end
-
-    return healthy_ips
-end
 
 -- Alternative function for weighted geographic routing
 function geoRouteWeighted()
@@ -162,43 +58,12 @@ function geoRouteWeighted()
     local available_ips = ifportup(443, all_ips, {
         timeout = 2,
         minimumFailures = 3,
-        interval = 15,         -- Check every 15 seconds
+        interval = 15,
         selector = 'all'       -- Return ALL healthy servers, not just one
     })
 
-    -- Filter recovered servers
-    local healthy_ips = {}
-    for _, ip in ipairs(available_ips) do
-        if isServerRecovered(ip) then
-            table.insert(healthy_ips, ip)
-        end
-    end
-
-    -- Track recovery
-    for _, ip in ipairs(available_ips) do
-        local was_down = true
-        for _, healthy_ip in ipairs(healthy_ips) do
-            if ip == healthy_ip then
-                was_down = false
-                break
-            end
-        end
-        if was_down and recovery_times[ip] == nil then
-            recovery_times[ip] = os.time()
-        end
-    end
-
-    -- Fallback logic
-    if #healthy_ips == 0 then
-        healthy_ips = available_ips
-    end
-    if #healthy_ips == 0 then
-        return all_ips
-    end
-
     -- Return weighted selection based on geographic distribution
-    -- This can be customized based on traffic patterns
-    return pickwrandom(healthy_ips)
+    return pickwrandom(available_ips)
 end
 
 -- Function for A record queries specifically
@@ -213,8 +78,6 @@ end
 
 -- Function to get server status (for monitoring/debugging)
 function getServerStatus()
-    initializeServerStates()
-
     local all_ips = getAllServerIPs()
     local available_ips = ifportup(443, all_ips, {
         timeout = 2,
@@ -223,69 +86,29 @@ function getServerStatus()
         selector = 'all'
     })
 
-    -- Update states to get current information
-    updateServerStates(all_ips, available_ips)
-
     local status_parts = {}
-    local healthy_count = 0
-    local recovering_count = 0
+    local up_count = 0
     local down_count = 0
-    local current_time = os.time()
+
+    -- Create lookup table for available IPs
+    local available_lookup = {}
+    for _, ip in ipairs(available_ips) do
+        available_lookup[ip] = true
+    end
 
     for _, server in ipairs(servers) do
-        local state = server_states[server.ip] or 'unknown'
-        local status_info = server.location .. ":" .. string.upper(state)
-
-        -- Add recovery time info if in recovery
-        if state == 'recovering' and recovery_times[server.ip] then
-            local elapsed = current_time - recovery_times[server.ip]
-            local remaining = 300 - elapsed  -- 5 minutes = 300 seconds
-            status_info = status_info .. "(" .. remaining .. "s)"
-        end
-
+        local is_up = available_lookup[server.ip] ~= nil
+        local status_info = server.location .. ":" .. (is_up and "UP" or "DOWN")
         table.insert(status_parts, status_info)
 
-        if state == 'healthy' then
-            healthy_count = healthy_count + 1
-        elseif state == 'recovering' then
-            recovering_count = recovering_count + 1
-        elseif state == 'down' then
+        if is_up then
+            up_count = up_count + 1
+        else
             down_count = down_count + 1
         end
     end
 
     -- Format as a single string suitable for TXT record
-    local summary = string.format("H:%d R:%d D:%d", healthy_count, recovering_count, down_count)
+    local summary = string.format("UP:%d DOWN:%d", up_count, down_count)
     return summary .. " " .. table.concat(status_parts, ",")
-end
-
--- Debug function to get detailed server state information
-function getDetailedServerStatus()
-    initializeServerStates()
-
-    local result = {}
-    local current_time = os.time()
-
-    for _, server in ipairs(servers) do
-        local state = server_states[server.ip] or 'unknown'
-        local recovery_time = recovery_times[server.ip]
-
-        local server_info = {
-            name = server.name,
-            ip = server.ip,
-            location = server.location,
-            state = state
-        }
-
-        if recovery_time then
-            local elapsed = current_time - recovery_time
-            local remaining = 300 - elapsed
-            server_info.recovery_elapsed = elapsed
-            server_info.recovery_remaining = remaining
-        end
-
-        table.insert(result, server_info)
-    end
-
-    return result
 end
