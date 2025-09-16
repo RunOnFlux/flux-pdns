@@ -75,15 +75,13 @@ function geoRoute()
     -- Initialize server states on first run
     initializeServerStates()
 
-    -- Health check with optimized configuration using built-in selectors
-    -- This handles first-query consistency and geographic selection automatically
+    -- Health check with working parameters (failOnIncompleteCheck causes crashes)
     local available_ips = ifportup(443, all_ips, {
-        timeout = 2000,              -- 2 seconds connection timeout in milliseconds
+        timeout = 2,                 -- 2 seconds connection timeout
         minimumFailures = 3,         -- 3 consecutive failures before marking as down
-        interval = 15,               -- Check every 15 seconds (balanced approach)
+        interval = 15,               -- Check every 15 seconds
         selector = 'pickclosest',    -- Use geographic selection for healthy servers
-        backupSelector = 'pickclosest', -- Use geographic selection even when all appear down (first query)
-        failOnIncompleteCheck = false   -- Don't fail on first query, use backupSelector instead
+        backupSelector = 'pickclosest' -- Use geographic selection even when all appear down
     })
 
     -- Update server states and manage recovery times
@@ -162,7 +160,7 @@ function geoRouteWeighted()
 
     -- Health check with same parameters as above
     local available_ips = ifportup(443, all_ips, {
-        timeout = 2000,
+        timeout = 2,
         minimumFailures = 3,
         interval = 15,         -- Check every 15 seconds
         selector = 'all'       -- Return ALL healthy servers, not just one
@@ -219,7 +217,7 @@ function getServerStatus()
 
     local all_ips = getAllServerIPs()
     local available_ips = ifportup(443, all_ips, {
-        timeout = 2000,
+        timeout = 2,
         minimumFailures = 3,
         interval = 15,
         selector = 'all'
