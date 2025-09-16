@@ -102,12 +102,12 @@ function geoRoute()
 end
 
 -- Update server states based on current health check results
-function updateServerStates(all_ips, available_ips)
+function updateServerStates(all_ips, result)
     local current_time = os.time()
 
     -- Create lookup table for available IPs
     local available_lookup = {}
-    for _, ip in ipairs(available_ips) do
+    for _, ip in ipairs(result) do
         available_lookup[ip] = true
     end
 
@@ -144,10 +144,10 @@ function updateServerStates(all_ips, available_ips)
 end
 
 -- Apply quarantine filtering - only return servers that are 'healthy' (not in recovery period)
-function applyQuarantineFilter(available_ips)
+function applyQuarantineFilter(result)
     local healthy_ips = {}
 
-    for _, ip in ipairs(available_ips) do
+    for _, ip in ipairs(result) do
         if server_states[ip] == 'healthy' then
             table.insert(healthy_ips, ip)
         end
@@ -218,7 +218,7 @@ function getServerStatus()
     initializeServerStates()
 
     local all_ips = getAllServerIPs()
-    local available_ips = ifportup(443, all_ips, {
+    local result = ifportup(443, all_ips, {
         timeout = 2000,
         minimumFailures = 3,
         interval = 15,
@@ -226,7 +226,7 @@ function getServerStatus()
     })
 
     -- Update states to get current information
-    updateServerStates(all_ips, available_ips)
+    updateServerStates(all_ips, result)
 
     local status_parts = {}
     local healthy_count = 0
