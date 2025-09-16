@@ -77,7 +77,7 @@ function geoRoute()
 
     -- Health check with optimized configuration using built-in selectors
     -- This handles first-query consistency and geographic selection automatically
-    local result = ifportup(443, all_ips, {
+    local available_ips = ifportup(443, all_ips, {
         timeout = 2000,              -- 2 seconds connection timeout in milliseconds
         minimumFailures = 3,         -- 3 consecutive failures before marking as down
         interval = 15,               -- Check every 15 seconds (balanced approach)
@@ -87,27 +87,27 @@ function geoRoute()
     })
 
     -- Update server states and manage recovery times
-    updateServerStates(all_ips, result)
+    updateServerStates(all_ips, available_ips)
 
     -- Apply quarantine filtering - remove servers still in 5-minute recovery period
-    local final_ips = applyQuarantineFilter(result)
+    local final_ips = applyQuarantineFilter(available_ips)
 
     -- If quarantine filtering removed all servers, return the unfiltered result
     -- This prevents complete service failure during recovery periods
     if #final_ips == 0 then
-        return result
+        return available_ips
     end
 
     return final_ips
 end
 
 -- Update server states based on current health check results
-function updateServerStates(all_ips, result)
+function updateServerStates(all_ips, available_ips)
     local current_time = os.time()
 
     -- Create lookup table for available IPs
     local available_lookup = {}
-    for _, ip in ipairs(result) do
+    for _, ip in ipairs(available_ips) do
         available_lookup[ip] = true
     end
 
@@ -144,10 +144,10 @@ function updateServerStates(all_ips, result)
 end
 
 -- Apply quarantine filtering - only return servers that are 'healthy' (not in recovery period)
-function applyQuarantineFilter(result)
+function applyQuarantineFilter(available_ips)
     local healthy_ips = {}
 
-    for _, ip in ipairs(result) do
+    for _, ip in ipairs(available_ips) do
         if server_states[ip] == 'healthy' then
             table.insert(healthy_ips, ip)
         end
@@ -218,7 +218,7 @@ function getServerStatus()
     initializeServerStates()
 
     local all_ips = getAllServerIPs()
-    local result = ifportup(443, all_ips, {
+    local available_ips = ifportup(443, all_ips, {
         timeout = 2000,
         minimumFailures = 3,
         interval = 15,
@@ -226,7 +226,7 @@ function getServerStatus()
     })
 
     -- Update states to get current information
-    updateServerStates(all_ips, result)
+    updateServerStates(all_ips, available_ips)
 
     local status_parts = {}
     local healthy_count = 0
