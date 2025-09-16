@@ -26,6 +26,20 @@ servers = {
 -- Format: recovery_times[ip] = timestamp when server came back online
 recovery_times = {}
 
+-- Track server states across queries for proper quarantine management
+-- Format: server_states[ip] = 'healthy' | 'down' | 'recovering'
+server_states = {}
+
+-- Initialize server states on first run
+function initializeServerStates()
+    local all_ips = getAllServerIPs()
+    for _, ip in ipairs(all_ips) do
+        if server_states[ip] == nil then
+            server_states[ip] = 'healthy'  -- Assume healthy initially
+        end
+    end
+end
+
 -- Function to get all server IPs
 function getAllServerIPs()
     local ips = {}
@@ -58,52 +72,88 @@ end
 function geoRoute()
     local all_ips = getAllServerIPs()
 
-    -- Health check: port 443 (HTTPS), 15 second interval, 3 failures = 45 seconds to detect failure
-    -- This returns only the IPs that are currently responding
-    local available_ips = ifportup(443, all_ips, {
-        timeout = 2000,        -- 2 seconds connection timeout in milliseconds
-        minimumFailures = 3,   -- 3 consecutive failures before marking as down
-        interval = 15,         -- Check every 15 seconds (balanced approach)
-        selector = 'all'       -- Return ALL healthy servers, not just one
+    -- Initialize server states on first run
+    initializeServerStates()
+
+    -- Health check with optimized configuration using built-in selectors
+    -- This handles first-query consistency and geographic selection automatically
+    local result = ifportup(443, all_ips, {
+        timeout = 2000,              -- 2 seconds connection timeout in milliseconds
+        minimumFailures = 3,         -- 3 consecutive failures before marking as down
+        interval = 15,               -- Check every 15 seconds (balanced approach)
+        selector = 'pickclosest',    -- Use geographic selection for healthy servers
+        backupSelector = 'pickclosest', -- Use geographic selection even when all appear down (first query)
+        failOnIncompleteCheck = false   -- Don't fail on first query, use backupSelector instead
     })
 
-    -- Filter out servers that are still in recovery period
-    local healthy_ips = {}
+    -- Update server states and manage recovery times
+    updateServerStates(all_ips, result)
+
+    -- Apply quarantine filtering - remove servers still in 5-minute recovery period
+    local final_ips = applyQuarantineFilter(result)
+
+    -- If quarantine filtering removed all servers, return the unfiltered result
+    -- This prevents complete service failure during recovery periods
+    if #final_ips == 0 then
+        return result
+    end
+
+    return final_ips
+end
+
+-- Update server states based on current health check results
+function updateServerStates(all_ips, available_ips)
+    local current_time = os.time()
+
+    -- Create lookup table for available IPs
+    local available_lookup = {}
     for _, ip in ipairs(available_ips) do
-        if isServerRecovered(ip) then
+        available_lookup[ip] = true
+    end
+
+    -- Update states for each server
+    for _, ip in ipairs(all_ips) do
+        local previous_state = server_states[ip]
+        local is_available = available_lookup[ip] ~= nil
+
+        if is_available then
+            if previous_state == 'down' then
+                -- Server came back up - start recovery period
+                server_states[ip] = 'recovering'
+                if recovery_times[ip] == nil then
+                    recovery_times[ip] = current_time
+                end
+            elseif previous_state == 'recovering' then
+                -- Check if recovery period is complete (5 minutes = 300 seconds)
+                if recovery_times[ip] and (current_time - recovery_times[ip]) >= 300 then
+                    server_states[ip] = 'healthy'
+                    recovery_times[ip] = nil  -- Clear recovery time
+                end
+                -- else: still in recovery period, keep state as 'recovering'
+            elseif previous_state == 'healthy' or previous_state == nil then
+                server_states[ip] = 'healthy'
+            end
+        else
+            -- Server is not available
+            if previous_state ~= 'down' then
+                server_states[ip] = 'down'
+                recovery_times[ip] = nil  -- Clear any existing recovery time
+            end
+        end
+    end
+end
+
+-- Apply quarantine filtering - only return servers that are 'healthy' (not in recovery period)
+function applyQuarantineFilter(available_ips)
+    local healthy_ips = {}
+
+    for _, ip in ipairs(available_ips) do
+        if server_states[ip] == 'healthy' then
             table.insert(healthy_ips, ip)
         end
     end
 
-    -- Track newly recovered servers
-    for _, ip in ipairs(available_ips) do
-        local was_down = true
-        for _, healthy_ip in ipairs(healthy_ips) do
-            if ip == healthy_ip then
-                was_down = false
-                break
-            end
-        end
-
-        -- If server is available but not in healthy list, it's recovering
-        if was_down and recovery_times[ip] == nil then
-            recovery_times[ip] = os.time()
-        end
-    end
-
-    -- If no healthy servers are available, use all available servers as fallback
-    if #healthy_ips == 0 then
-        healthy_ips = available_ips
-    end
-
-    -- If still no servers available, return all servers (last resort)
-    if #healthy_ips == 0 then
-        return all_ips
-    end
-
-    -- Use pickclosest to select geographically nearest server
-    -- This function uses the GeoIP data of the requesting client
-    return pickclosest(healthy_ips)
+    return healthy_ips
 end
 
 -- Alternative function for weighted geographic routing
@@ -165,45 +215,79 @@ end
 
 -- Function to get server status (for monitoring/debugging)
 function getServerStatus()
+    initializeServerStates()
+
     local all_ips = getAllServerIPs()
     local available_ips = ifportup(443, all_ips, {
         timeout = 2000,
         minimumFailures = 3,
-        interval = 15,         -- Check every 15 seconds
-        selector = 'all'       -- Return ALL healthy servers, not just one
+        interval = 15,
+        selector = 'all'
     })
+
+    -- Update states to get current information
+    updateServerStates(all_ips, available_ips)
 
     local status_parts = {}
     local healthy_count = 0
-    local available_count = 0
-    
+    local recovering_count = 0
+    local down_count = 0
+    local current_time = os.time()
+
     for _, server in ipairs(servers) do
-        local is_available = false
-        for _, available_ip in ipairs(available_ips) do
-            if server.ip == available_ip then
-                is_available = true
-                available_count = available_count + 1
-                break
-            end
+        local state = server_states[server.ip] or 'unknown'
+        local status_info = server.location .. ":" .. string.upper(state)
+
+        -- Add recovery time info if in recovery
+        if state == 'recovering' and recovery_times[server.ip] then
+            local elapsed = current_time - recovery_times[server.ip]
+            local remaining = 300 - elapsed  -- 5 minutes = 300 seconds
+            status_info = status_info .. "(" .. remaining .. "s)"
         end
 
-        local is_healthy = is_available and isServerRecovered(server.ip)
-        if is_healthy then
+        table.insert(status_parts, status_info)
+
+        if state == 'healthy' then
             healthy_count = healthy_count + 1
+        elseif state == 'recovering' then
+            recovering_count = recovering_count + 1
+        elseif state == 'down' then
+            down_count = down_count + 1
         end
-
-        local server_status = "DOWN"
-        if is_healthy then
-            server_status = "HEALTHY"
-        elseif is_available then
-            server_status = "RECOVERING"
-        end
-        
-        table.insert(status_parts, server.location .. ":" .. server_status)
     end
 
     -- Format as a single string suitable for TXT record
-    local summary = string.format("Servers:%d Healthy:%d Available:%d", 
-                                   #servers, healthy_count, available_count)
-    return summary .. " Status:" .. table.concat(status_parts, ",")
+    local summary = string.format("H:%d R:%d D:%d", healthy_count, recovering_count, down_count)
+    return summary .. " " .. table.concat(status_parts, ",")
+end
+
+-- Debug function to get detailed server state information
+function getDetailedServerStatus()
+    initializeServerStates()
+
+    local result = {}
+    local current_time = os.time()
+
+    for _, server in ipairs(servers) do
+        local state = server_states[server.ip] or 'unknown'
+        local recovery_time = recovery_times[server.ip]
+
+        local server_info = {
+            name = server.name,
+            ip = server.ip,
+            location = server.location,
+            state = state
+        }
+
+        if recovery_time then
+            local elapsed = current_time - recovery_time
+            local remaining = 300 - elapsed
+            server_info.recovery_elapsed = elapsed
+            server_info.recovery_remaining = remaining
+        end
+
+        table.insert(result, server_info)
+    end
+
+    return result
 end
