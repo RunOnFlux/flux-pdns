@@ -4,7 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=healthcheck
+Group=healthcheck
 WorkingDirectory=/opt/healthchecker/src
 ExecStart=/usr/bin/npm start
 Restart=always

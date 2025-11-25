@@ -16,6 +16,11 @@
       listen: "restart pdns"
       register: pdns_restarted
 
+    - name: reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: yes
+      listen: "reload systemd"
+
     - name: restart dns-healthcheck
       ansible.builtin.systemd:
         name: dns-healthcheck
@@ -170,14 +175,26 @@
         minute: "0"
 
     # Health checker setup (masters only)
+    - name: Create healthcheck system user
+      ansible.builtin.user:
+        name: healthcheck
+        system: yes
+        shell: /usr/sbin/nologin
+        home: /opt/healthchecker
+        create_home: no
+        state: present
+      when:
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+
     - name: Create health checker application directories
-      file:
+      ansible.builtin.file:
         path: "{{ item }}"
         state: directory
-        owner: root
-        group: root
+        owner: healthcheck
+        group: healthcheck
         mode: "0755"
       loop:
+        - /opt/healthchecker
         - /opt/healthchecker/src
         - /opt/healthchecker/src/routes
         - /opt/healthchecker/src/bin
@@ -188,8 +205,8 @@
       ansible.builtin.copy:
         src: files/healthcheck/
         dest: /opt/healthchecker/src/
-        owner: root
-        group: root
+        owner: healthcheck
+        group: healthcheck
         mode: preserve
       when:
         - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
@@ -206,8 +223,8 @@
       ansible.builtin.template:
         src: templates/health-config.json.j2
         dest: /opt/healthchecker/src/config.json
-        owner: root
-        group: root
+        owner: healthcheck
+        group: healthcheck
         mode: "0644"
       when:
         - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
@@ -217,9 +234,9 @@
       ansible.builtin.template:
         src: templates/health-simple.js.j2
         dest: /opt/healthchecker/src/routes/health-simple.js
-        owner: root
-        group: root
-        mode: 0644
+        owner: healthcheck
+        group: healthcheck
+        mode: "0644"
       vars:
         subdomain: "{{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}"
       when:
@@ -230,9 +247,9 @@
       ansible.builtin.template:
         src: templates/health.js.j2
         dest: /opt/healthchecker/src/routes/healthdetail.js
-        owner: root
-        group: root
-        mode: 0644
+        owner: healthcheck
+        group: healthcheck
+        mode: "0644"
       vars:
         subdomain: "{{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}"
       when:
@@ -240,9 +257,19 @@
       notify: restart dns-healthcheck
 
     - name: Install health checker npm dependencies
-      npm:
+      ansible.builtin.npm:
         path: /opt/healthchecker/src
         state: present
+      when:
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+
+    - name: Ensure healthchecker directory ownership
+      ansible.builtin.file:
+        path: /opt/healthchecker
+        state: directory
+        owner: healthcheck
+        group: healthcheck
+        recurse: yes
       when:
         - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
 
@@ -255,6 +282,9 @@
         mode: "0644"
       when:
         - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+      notify:
+        - reload systemd
+        - restart dns-healthcheck
 
     - name: Reload systemd daemon for DNS health check
       ansible.builtin.systemd:
