@@ -14,6 +14,15 @@ const resolveSoa = promisify(resolver.resolveSoa.bind(resolver));
 const resolveNs = promisify(resolver.resolveNs.bind(resolver));
 
 // Configuration based on environment
+{% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
+{% set geo_ips = [] %}
+{% for zone_config in powerdns[env].zone_configs %}
+  {% if zone_config.template_vars.geo_routing | default(false) %}
+    {% for region in zone_config.template_vars.geo_regions | default([]) %}
+      {% set _ = geo_ips.append(region.ip) %}
+    {% endfor %}
+  {% endif %}
+{% endfor %}
 const config = {
   app_domain: '{{ subdomain }}.runonflux.io',
   geo_domain: '{{ "cdn-geodev" if DEPLOY_ENV == "staging" else "cdn-geo" }}.runonflux.io',
@@ -21,7 +30,7 @@ const config = {
     staging: ['fdm-lb-2-1.runonflux.io', 'fdm-lb-2-2.runonflux.io'],
     production: ['fdm-lb-1-1.runonflux.io', 'fdm-lb-1-2.runonflux.io', 'fdm-lb-1-3.runonflux.io', 'fdm-lb-1-4.runonflux.io']
   },
-  expected_cdn_ips: ['107.152.47.137', '5.39.57.50', '114.29.237.116'],
+  expected_cdn_ips: [{% for ip in geo_ips %}'{{ ip }}'{{ ", " if not loop.last else "" }}{% endfor %}],
   environment: '{{ DEPLOY_ENV }}'
 };
 
