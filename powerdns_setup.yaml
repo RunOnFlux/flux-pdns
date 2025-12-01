@@ -37,7 +37,7 @@
 
     - name: Set API IP
       ansible.builtin.set_fact:
-        api_ip: "{{ hostvars[inventory_hostname]['health_check_bind_address'] | default(ansible_host) }}"
+        api_ip: "{{ ansible_host }}"
 
     - name: Create apt keyrings directory
       ansible.builtin.file:

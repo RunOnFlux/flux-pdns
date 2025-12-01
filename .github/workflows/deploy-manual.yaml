@@ -24,7 +24,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: runonflux
     steps:
       - name: Cancel if values not set
         if: "${{ (github.event.inputs.targets == 'single_host') && ! github.event.inputs.host }}"
