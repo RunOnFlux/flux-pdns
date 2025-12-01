@@ -1,0 +1,49 @@
+# PowerDNS Infrastructure Inventory
+
+app2:
+  hosts:
+    pdns-staging-fn1:
+      ansible_host: 10.100.0.154
+      ansible_user: root
+      pdns_role: master
+      public_ip: 5.39.57.39
+      health_check_enabled: true
+      health_check_bind_address: 0.0.0.0
+      health_check_port: 3000
+      api_enabled: true
+    pdns-staging-us1:
+      ansible_host: 5.161.41.40
+      ansible_user: root
+      pdns_role: slave
+      # public_ip same as ansible_host for this server
+      health_check_enabled: true
+      health_check_bind_address: 0.0.0.0
+      health_check_port: 3000
+
+app:
+  hosts:
+    pdns-prod-fn1:
+      ansible_host: 10.100.0.153
+      ansible_user: root
+      pdns_role: master
+      public_ip: 5.39.57.38
+      health_check_enabled: true
+      health_check_bind_address: 0.0.0.0
+      health_check_port: 3000
+      api_enabled: true
+    pdns-prod-us1:
+      ansible_host: 5.161.203.77
+      ansible_user: root
+      pdns_role: slave
+      # public_ip same as ansible_host for this server
+      health_check_enabled: true
+      health_check_bind_address: 0.0.0.0
+      health_check_port: 3000
+    pdns-prod-sg1:
+      ansible_host: 178.128.30.247
+      ansible_user: root
+      pdns_role: slave
+      # public_ip same as ansible_host for this server
+      health_check_enabled: true
+      health_check_bind_address: 0.0.0.0
+      health_check_port: 3000

@@ -1,0 +1,6 @@
+{
+  "enabled": {{ hostvars[inventory_hostname]['health_check_enabled'] | default(false) | lower }},
+  "bind_address": "{{ hostvars[inventory_hostname]['health_check_bind_address'] | default('127.0.0.1') }}",
+  "port": {{ hostvars[inventory_hostname]['health_check_port'] | default(3000) }},
+  "environment": "{{ DEPLOY_ENV }}"
+}

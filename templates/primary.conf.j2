@@ -1,0 +1,19 @@
+# Primary server configuration for slave PowerDNS servers
+# This file specifies which master server to replicate from with TSIG authentication
+
+{% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
+{% set zones = powerdns[env].zone_configs | map(attribute='domain') | list %}
+
+# Configure zones from master server(s) with TSIG authentication
+{% for zone in zones %}
+# Zone: {{ zone }}
+[{{ zone }}]
+type=slave
+{% for master_ip in powerdns[env].master_ips %}
+master={{ master_ip }}:53
+{% endfor %}
+tsig-algo=hmac-sha256
+tsig-secret={{ powerdns[env].tsig_zone_transfer_key }}
+tsig-name=zone-transfer
+
+{% endfor %}

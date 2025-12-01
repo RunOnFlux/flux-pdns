@@ -1,0 +1,100 @@
+# PowerDNS Configuration with Geo-routing and Lua Records
+# This configuration enables both the pipe backend and Lua records for geo-routing
+
+# Primary backend - SQLite3 backend for all zones, plus GeoIP for Lua Records
+launch=gsqlite3,geoip
+
+# SQLite3 backend configuration
+gsqlite3-database=/var/lib/powerdns/pdns.sqlite3
+gsqlite3-dnssec=yes
+
+# Enable Lua records for geo-routing with shared state for consistent health checks
+enable-lua-records=shared
+lua-health-checks-interval=60
+
+# GeoIP configuration for Lua Records (MMDB format)
+geoip-database-files=mmdb:/usr/share/GeoIP/GeoLite2-City.mmdb;mode=mmap;language=en
+
+# EDNS Client Subnet for better geo-location accuracy
+edns-subnet-processing=yes
+
+# Performance and caching settings
+cache-ttl=60
+negquery-cache-ttl=60
+query-cache-ttl=20
+max-cache-entries=1000000
+
+# Logging configuration
+loglevel=5
+log-dns-queries=yes
+log-dns-details=yes
+
+{% set server_role = pdns_role | default('slave') %}
+{% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
+{% if server_role == 'master' %}
+# Security settings - Enable API for certbot
+webserver=yes
+webserver-address={{ hostvars[inventory_hostname]['health_check_bind_address'] | default(ansible_host) }}
+webserver-port=8081
+webserver-allow-from=127.0.0.1,{{ powerdns.cert_server_ip }}
+api=yes
+api-key={{ powerdns[env].api_key }}
+{% else %}
+# Secondary server - no webserver/API needed
+webserver=no
+api=no
+{% endif %}
+
+# DNSSEC settings - prevent DNSSEC key responses to avoid REFUSED responses
+direct-dnskey=no
+
+# SOA editing for API updates - handled by per-zone SOA-EDIT-API metadata
+# default-soa-edit removed to avoid conflicts with SOA-EDIT-API
+
+# Network settings
+local-address=0.0.0.0
+local-port=53
+socket-dir=/var/run/pdns
+
+# Thread settings
+distributor-threads=3
+receiver-threads=2
+
+# Query settings
+max-tcp-connections=20
+max-queue-length=5000
+
+# Master/Slave replication settings
+{% set server_role = pdns_role | default('slave') %}
+{% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
+
+{% if server_role == 'master' %}
+# Master server configuration
+primary=yes
+secondary=no
+
+# Configure TSIG for zone transfers
+# TSIG keys are loaded from the bind configuration and key files
+# When TSIG is configured, allow-axfr-ips is ignored for TSIG-authenticated requests
+allow-axfr-ips=127.0.0.1
+
+# Notify slaves when zones change
+{% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
+also-notify={{ powerdns[env].slave_ips | join(',') }}
+
+# Enable DNS updates for ACME challenges
+dnsupdate=yes
+allow-dnsupdate-from=127.0.0.1
+
+{% else %}
+# Secondary server configuration
+primary=no
+secondary=yes
+secondary-do-renotify=no
+
+# Only localhost can query AXFR (TSIG required for remote)
+allow-axfr-ips=127.0.0.1
+{% endif %}
+
+# TSIG keys are defined in the bind configuration (named.conf)
+# No need to include them in PowerDNS config

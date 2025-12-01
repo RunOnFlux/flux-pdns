@@ -1,0 +1,76 @@
+; Generic DNS Zone Template - {{ item.domain }}
+; Environment: {{ DEPLOY_ENV }}
+; Generated: {{ ansible_date_time.iso8601 | default('Manual') }}
+;
+$TTL {{ item.template_vars.default_ttl | default('3600') }}
+$ORIGIN {{ item.domain }}.
+
+; SOA record
+@       IN      SOA     {{ powerdns[env]['soa_nameserver'] }} {{ powerdns[env]['soa_email'] }} (
+                        {{ "%-15s"|format(zone_serial) }} ; Serial (YYYYMMDD00, auto-managed by PowerDNS)
+                        {{ "%-15s"|format("3600") }} ; Refresh
+                        {{ "%-15s"|format("600") }} ; Retry
+                        {{ "%-15s"|format("86400") }} ; Expire
+                        {{ "%-15s"|format((item.template_vars.default_ttl | default('3600')) ~ ' )') }} ; Minimum TTL
+
+; Name servers for this zone
+{% for ns in powerdns[env]['nameservers'] %}
+@       IN      NS      {{ ns }}
+{% endfor %}
+
+{% if item.template_vars.lua_routing | default(false) %}
+; Load Lua functions for dynamic routing
+_config         IN      LUA     LUA     "dofile('/opt/pdns/scripts/{{ item.template_vars.routing_script | default('app_routing.lua') }}')"
+
+; Wildcard routing using Lua records
+{% if item.template_vars.routing_function is defined %}
+*               IN      LUA     CNAME   ";include('_config'); return {{ item.template_vars.routing_function }}(qname)"
+{% endif %}
+
+{% if item.template_vars.debug_function is defined %}
+; Debug endpoint to see routing decisions
+_debug          IN      LUA     TXT     ";include('_config'); return {{ item.template_vars.debug_function }}(qname)"
+{% endif %}
+{% endif %}
+
+{% if item.template_vars.geo_routing | default(false) %}
+; Geographic routing configuration
+_config         IN      LUA     LUA     "dofile('/opt/pdns/scripts/geo_routing.lua')"
+
+; Main geographic routing record
+@               IN      LUA     A       ";include('_config'); return geoRoute()"
+
+; Health check records for monitoring
+{% for region in item.template_vars.geo_regions | default([]) %}
+_health.{{ region.name }}    300    IN    TXT    "{{ region.description }} - {{ region.server }} - {{ region.ip }}"
+{% endfor %}
+
+{% if item.template_vars.status_endpoint | default(false) %}
+; Dynamic status endpoint for monitoring
+_status         IN      LUA     TXT     ";include('_config'); return getServerStatus()"
+{% endif %}
+{% endif %}
+
+{% if custom_records is defined %}
+; Custom records
+{% for record in custom_records %}
+{{ record.name }}{% if record.ttl is defined %}    {{ record.ttl }}{% endif %}    IN    {{ record.type }}    {{ record.value }}
+{% endfor %}
+{% endif %}
+
+; Standard records (if not using dynamic routing)
+{% if not item.template_vars.lua_routing | default(false) and not item.template_vars.geo_routing | default(false) %}
+{% if a_records is defined %}
+; A records
+{% for record in a_records %}
+{{ record.name | default('@') }}    {{ record.ttl | default('') }}    IN    A    {{ record.ip }}
+{% endfor %}
+{% endif %}
+
+{% if cname_records is defined %}
+; CNAME records
+{% for record in cname_records %}
+{{ record.name }}    {{ record.ttl | default('') }}    IN    CNAME    {{ record.target }}
+{% endfor %}
+{% endif %}
+{% endif %}

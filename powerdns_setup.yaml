@@ -1,0 +1,676 @@
+---
+- name: Install and configure PowerDNS with Geo-routing
+  hosts: "{{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}"
+  become: yes
+  vars_files:
+    - vars.yaml
+  vars:
+    env: "{{ 'staging' if DEPLOY_ENV == 'staging' else 'production' }}"
+
+  handlers:
+    - name: restart powerdns
+      ansible.builtin.systemd:
+        name: pdns
+        state: restarted
+        enabled: yes
+      listen: "restart pdns"
+      register: pdns_restarted
+
+    - name: reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: yes
+      listen: "reload systemd"
+
+    - name: restart dns-healthcheck
+      ansible.builtin.systemd:
+        name: dns-healthcheck
+        state: restarted
+        enabled: yes
+      listen: "restart dns-healthcheck"
+      when:
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+
+  tasks:
+    - name: Set environment variable
+      ansible.builtin.set_fact:
+        env: "{{ 'staging' if DEPLOY_ENV == 'staging' else 'production' }}"
+
+    - name: Set API IP
+      ansible.builtin.set_fact:
+        api_ip: "{{ hostvars[inventory_hostname]['health_check_bind_address'] | default(ansible_host) }}"
+
+    - name: Create apt keyrings directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Download PowerDNS repository key
+      ansible.builtin.get_url:
+        url: "https://repo.powerdns.com/FD380FBB-pub.asc"
+        dest: /tmp/powerdns-key.asc
+        mode: "0644"
+
+    - name: Add PowerDNS repository key to keyring
+      ansible.builtin.shell:
+        cmd: gpg --dearmor < /tmp/powerdns-key.asc > /etc/apt/keyrings/powerdns.gpg
+        creates: /etc/apt/keyrings/powerdns.gpg
+
+    - name: Add PowerDNS repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/powerdns.gpg] http://repo.powerdns.com/ubuntu {{ ansible_distribution_release }}-auth-{{ powerdns.auth_version }} main"
+        state: present
+        filename: powerdns
+
+    - name: Remove old PowerDNS repository file
+      ansible.builtin.file:
+        path: /etc/apt/sources.list.d/repo_powerdns_com_ubuntu.list
+        state: absent
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 86400
+
+    - name: Configure DNS resolution
+      ansible.builtin.copy:
+        content: |
+          nameserver 8.8.8.8
+          nameserver 8.8.4.4
+        dest: /etc/resolv.conf
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Disable and stop systemd-resolved
+      ansible.builtin.systemd:
+        name: systemd-resolved
+        state: stopped
+        enabled: no
+
+    - name: Install required packages
+      ansible.builtin.package:
+        name:
+          - pdns-server
+          - pdns-backend-sqlite3
+          - pdns-backend-geoip
+          - python3
+          - logrotate
+          - nginx
+          - wget
+          - libgeoip1
+          - libmaxminddb0
+          - mmdb-bin
+          - geoipupdate
+          - sqlite3
+        state: present
+
+    - name: register state of /etc/apt/sources.list.d/nodesource.list
+      stat:
+        path: /etc/apt/sources.list.d/nodesource.list
+      register: nodesource_path
+
+    - name: Download Node.js 22.x setup script
+      ansible.builtin.get_url:
+        url: "https://deb.nodesource.com/setup_22.x"
+        dest: /tmp/nodejs_setup.sh
+        mode: "0755"
+      when: not nodesource_path.stat.exists
+
+    - name: Install Node.js 22.x repository
+      ansible.builtin.shell:
+        cmd: /tmp/nodejs_setup.sh
+        creates: /etc/apt/sources.list.d/nodesource.list
+
+    - name: Install Node.js
+      apt:
+        name: nodejs
+        state: latest
+
+    # GeoIP Database Setup with MaxMind
+    - name: Create GeoIP directory
+      ansible.builtin.file:
+        path: /usr/share/GeoIP
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create GeoIP configuration from template
+      ansible.builtin.template:
+        src: templates/GeoIP.conf.j2
+        dest: /etc/GeoIP.conf
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Check GeoIP database age
+      ansible.builtin.stat:
+        path: /usr/share/GeoIP/GeoLite2-City.mmdb
+      register: geoip_db_stat
+
+    - name: Run initial GeoIP database update
+      command: /usr/bin/geoipupdate
+      register: geoip_update
+      failed_when: geoip_update.rc != 0
+      when: not geoip_db_stat.stat.exists or ((ansible_date_time.epoch | int) - geoip_db_stat.stat.mtime) > 604800
+      changed_when: geoip_update.rc == 0
+
+    - name: Verify GeoIP databases exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      with_items:
+        - /usr/share/GeoIP/GeoLite2-City.mmdb
+        - /usr/share/GeoIP/GeoLite2-Country.mmdb
+      register: geoip_files
+      failed_when: not geoip_files.stat.exists
+
+    - name: Set up weekly GeoIP database updates
+      ansible.builtin.cron:
+        name: "Update GeoIP databases"
+        user: root
+        job: "/usr/bin/geoipupdate"
+        weekday: "0"
+        hour: "3"
+        minute: "0"
+
+    # Health checker setup (masters only)
+    - name: Create healthcheck system user
+      ansible.builtin.user:
+        name: healthcheck
+        system: yes
+        shell: /usr/sbin/nologin
+        home: /opt/healthchecker
+        create_home: no
+        state: present
+      when:
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+
+    - name: Create health checker application directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: healthcheck
+        group: healthcheck
+        mode: "0755"
+      loop:
+        - /opt/healthchecker
+        - /opt/healthchecker/src
+        - /opt/healthchecker/src/routes
+        - /opt/healthchecker/src/bin
+      when:
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+
+    - name: Copy health checker application files
+      ansible.builtin.copy:
+        src: files/healthcheck/
+        dest: /opt/healthchecker/src/
+        owner: healthcheck
+        group: healthcheck
+        mode: preserve
+      when:
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+
+    - name: Template geo_routing.lua script
+      ansible.builtin.template:
+        src: templates/geo_routing.lua.j2
+        dest: /opt/pdns/scripts/geo_routing.lua
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Generate health checker configuration file
+      ansible.builtin.template:
+        src: templates/health-config.json.j2
+        dest: /opt/healthchecker/src/config.json
+        owner: healthcheck
+        group: healthcheck
+        mode: "0644"
+      when:
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+      notify: restart dns-healthcheck
+
+    - name: Generate simple health checker route handler
+      ansible.builtin.template:
+        src: templates/health-simple.js.j2
+        dest: /opt/healthchecker/src/routes/health-simple.js
+        owner: healthcheck
+        group: healthcheck
+        mode: "0644"
+      vars:
+        subdomain: "{{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}"
+      when:
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+      notify: restart dns-healthcheck
+
+    - name: Generate detailed health checker route handler
+      ansible.builtin.template:
+        src: templates/health.js.j2
+        dest: /opt/healthchecker/src/routes/healthdetail.js
+        owner: healthcheck
+        group: healthcheck
+        mode: "0644"
+      vars:
+        subdomain: "{{ 'app2' if DEPLOY_ENV == 'staging' else 'app' }}"
+      when:
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+      notify: restart dns-healthcheck
+
+    - name: Install health checker npm dependencies
+      ansible.builtin.npm:
+        path: /opt/healthchecker/src
+        state: present
+      when:
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+
+    - name: Ensure healthchecker directory ownership
+      ansible.builtin.file:
+        path: /opt/healthchecker
+        state: directory
+        owner: healthcheck
+        group: healthcheck
+        recurse: yes
+      when:
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+
+    - name: Create DNS health check systemd service
+      ansible.builtin.copy:
+        src: files/dns-healthcheck.service
+        dest: /etc/systemd/system/dns-healthcheck.service
+        owner: root
+        group: root
+        mode: "0644"
+      when:
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+      notify:
+        - reload systemd
+        - restart dns-healthcheck
+
+    - name: Reload systemd daemon for DNS health check
+      ansible.builtin.systemd:
+        daemon_reload: yes
+      when:
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+
+    - name: Start and enable DNS health check service
+      ansible.builtin.systemd:
+        name: dns-healthcheck
+        state: started
+        enabled: yes
+      when:
+        - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+
+    # PowerDNS configuration
+    - name: Create PowerDNS zones directory
+      ansible.builtin.file:
+        path: /etc/powerdns/zones
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Copy PowerDNS main configuration file
+      ansible.builtin.template:
+        src: templates/pdns.conf.j2
+        dest: /etc/powerdns/pdns.conf
+        owner: root
+        group: root
+        mode: "0644"
+        backup: yes
+      notify: restart pdns
+
+    # SQLite3 backend database setup
+    - name: Create PowerDNS database directory
+      ansible.builtin.file:
+        path: /var/lib/powerdns
+        state: directory
+        owner: pdns
+        group: pdns
+        mode: "0755"
+
+    - name: Check if PowerDNS database exists
+      ansible.builtin.stat:
+        path: /var/lib/powerdns/pdns.sqlite3
+      register: pdns_db_stat
+
+    - name: Initialize PowerDNS SQLite schema
+      ansible.builtin.shell: |
+        sqlite3 /var/lib/powerdns/pdns.sqlite3 < /usr/share/pdns-backend-sqlite3/schema/schema.sqlite3.sql
+        chown pdns:pdns /var/lib/powerdns/pdns.sqlite3
+        chmod 640 /var/lib/powerdns/pdns.sqlite3
+      when: not pdns_db_stat.stat.exists
+
+    # Master/Slave replication setup with SQLite3 backend
+    # TSIG keys are now stored in the database, not in separate files
+
+    - name: Generate TSIG key for zone transfers if not set
+      ansible.builtin.set_fact:
+        tsig: "{{ tsig | default({}) | combine({env: {'zone_transfer_key': lookup('pipe', 'openssl rand -base64 48')}}, recursive=True) }}"
+      when: tsig[env].zone_transfer_key | default('') in ['', 'REPLACE_WITH_STAGING_KEY', 'REPLACE_WITH_PRODUCTION_KEY']
+      run_once: true
+
+    # TSIG keys are now managed through SQLite3 backend via pdnsutil
+    # The old file-based TSIG configuration is no longer needed
+
+    # Zone migration - check and import zones individually
+    - name: Set dynamic serial number for zone files
+      set_fact:
+        zone_serial: "{{ ansible_date_time.date | regex_replace('-', '') }}00"
+      when: pdns_role == 'master'
+
+    - name: Check if zones exist
+      ansible.builtin.shell: |
+        sqlite3 /var/lib/powerdns/pdns.sqlite3 "SELECT COUNT(*) FROM domains WHERE name='{{ zone.domain }}';"
+      register: zone_checks
+      loop: "{{ powerdns[env].zone_configs }}"
+      loop_control:
+        loop_var: zone
+      changed_when: false
+
+    - name: Generate zone files for missing zones
+      template:
+        src: zone.template.j2
+        dest: "zones/{{ zone_result.zone.domain }}.zone"
+        owner: root
+        group: root
+        mode: "0644"
+      vars:
+        item: "{{ zone_result.zone }}"
+      loop: "{{ zone_checks.results }}"
+      loop_control:
+        loop_var: zone_result
+      when:
+        - zone_result.stdout | int == 0
+        - pdns_role == 'master'
+
+    - name: Import missing zones (master)
+      ansible.builtin.shell: |
+        pdnsutil load-zone {{ zone_result.zone.domain }} zones/{{ zone_result.zone.domain }}.zone
+      loop: "{{ zone_checks.results }}"
+      loop_control:
+        loop_var: zone_result
+      when:
+        - zone_result.stdout | int == 0
+        - pdns_role == 'master'
+      notify: restart pdns
+
+    - name: Create missing secondary zones (slave)
+      ansible.builtin.shell: |
+        pdnsutil create-secondary-zone {{ zone_result.zone.domain }} {{ powerdns[env].master_ips | join(' ') }}
+        pdnsutil activate-tsig-key {{ zone_result.zone.domain }} zone-transfer secondary
+      loop: "{{ zone_checks.results }}"
+      loop_control:
+        loop_var: zone_result
+      when:
+        - zone_result.stdout | int == 0
+        - pdns_role == 'slave'
+
+    - name: Optimize database after zone changes
+      ansible.builtin.shell: |
+        echo "ANALYZE;" | sqlite3 /var/lib/powerdns/pdns.sqlite3
+      changed_when: false
+
+    # TSIG key configuration for SQLite3 backend
+    - name: Check if TSIG key exists
+      ansible.builtin.shell: |
+        pdnsutil list-tsig-keys | grep "zone-transfer" || true
+      register: tsig_key_exists
+      changed_when: false
+
+    - name: Import TSIG key for zone transfers
+      ansible.builtin.shell: |
+        pdnsutil import-tsig-key zone-transfer hmac-sha256 "{{ powerdns[env].tsig_zone_transfer_key }}"
+      when: "'zone-transfer' not in tsig_key_exists.stdout"
+      notify: restart pdns
+
+    - name: Configure TSIG metadata for domains
+      ansible.builtin.shell: |
+        current_value=$(pdnsutil get-meta "{{ item }}" TSIG-ALLOW-AXFR 2>/dev/null | grep "^TSIG-ALLOW-AXFR" | cut -d'=' -f2 | xargs)
+        if [ "$current_value" != "zone-transfer" ]; then
+          pdnsutil set-meta "{{ item }}" TSIG-ALLOW-AXFR zone-transfer
+          echo "CHANGED"
+        else
+          echo "OK"
+        fi
+      loop: "{{ powerdns[env].zone_configs | map(attribute='domain') | list }}"
+      when: pdns_role == 'master'
+      register: tsig_metadata_result
+      changed_when: "'CHANGED' in tsig_metadata_result.stdout"
+      notify: restart pdns
+
+    - name: Configure TSIG for NOTIFY packets
+      ansible.builtin.shell: |
+        current_value=$(pdnsutil get-meta "{{ item }}" NOTIFY-DNSUPDATE 2>/dev/null | grep "^NOTIFY-DNSUPDATE" | cut -d'=' -f2 | xargs)
+        if [ "$current_value" != "zone-transfer" ]; then
+          pdnsutil set-meta "{{ item }}" NOTIFY-DNSUPDATE zone-transfer
+          echo "CHANGED"
+        else
+          echo "OK"
+        fi
+      loop: "{{ powerdns[env].zone_configs | map(attribute='domain') | list }}"
+      when: pdns_role == 'master'
+      register: notify_tsig_result
+      changed_when: "'CHANGED' in notify_tsig_result.stdout"
+      notify: restart pdns
+
+    - name: Configure ALSO-NOTIFY for zone-level notifications
+      ansible.builtin.shell: |
+        current_value=$(pdnsutil get-meta "{{ item }}" ALSO-NOTIFY 2>/dev/null | grep "^ALSO-NOTIFY" | cut -d'=' -f2 | xargs)
+        expected_value="{{ powerdns[env].slave_ips | join(',') }}"
+        if [ "$current_value" != "$expected_value" ]; then
+          pdnsutil set-meta "{{ item }}" ALSO-NOTIFY {{ powerdns[env].slave_ips | join(',') }}
+          echo "CHANGED"
+        else
+          echo "OK"
+        fi
+      loop: "{{ powerdns[env].zone_configs | map(attribute='domain') | list }}"
+      when: pdns_role == 'master'
+      register: also_notify_result
+      changed_when: "'CHANGED' in also_notify_result.stdout"
+      notify: restart pdns
+
+    - name: Configure SOA-EDIT to prevent load-zone incrementation
+      ansible.builtin.shell: |
+        current_value=$(pdnsutil get-meta "{{ item }}" SOA-EDIT 2>/dev/null | grep "^SOA-EDIT" | cut -d'=' -f2 | xargs)
+        if [ "$current_value" != "NONE" ]; then
+          pdnsutil set-meta "{{ item }}" SOA-EDIT NONE
+          echo "CHANGED"
+        else
+          echo "OK"
+        fi
+      loop: "{{ powerdns[env].zone_configs | map(attribute='domain') | list }}"
+      when: pdns_role == 'master'
+      register: soa_edit_result
+      changed_when: "'CHANGED' in soa_edit_result.stdout"
+      notify: restart pdns
+
+    - name: Configure SOA-EDIT-API for HTTP API incrementation
+      ansible.builtin.shell: |
+        current_value=$(pdnsutil get-meta "{{ item }}" SOA-EDIT-API 2>/dev/null | grep "^SOA-EDIT-API" | cut -d'=' -f2 | xargs)
+        if [ "$current_value" != "DEFAULT" ]; then
+          pdnsutil set-meta "{{ item }}" SOA-EDIT-API DEFAULT
+          echo "CHANGED"
+        else
+          echo "OK"
+        fi
+      loop: "{{ powerdns[env].zone_configs | map(attribute='domain') | list }}"
+      when: pdns_role == 'master'
+      register: soa_edit_api_result
+      changed_when: "'CHANGED' in soa_edit_api_result.stdout"
+      notify: restart pdns
+
+    - name: Set zone kind to MASTER for automatic NOTIFY
+      ansible.builtin.shell: |
+        if pdnsutil show-zone "{{ item }}" 2>/dev/null | grep -q "This is a Master zone"; then
+          echo "OK"
+        else
+          pdnsutil set-kind "{{ item }}" MASTER
+          echo "CHANGED"
+        fi
+      loop: "{{ powerdns[env].zone_configs | map(attribute='domain') | list }}"
+      when: pdns_role == 'master'
+      register: zone_kind_result
+      changed_when: "'CHANGED' in zone_kind_result.stdout"
+      notify: restart pdns
+
+    # Scripts directory setup
+    - name: Ensure /opt/pdns/scripts directory exists
+      ansible.builtin.file:
+        path: /opt/pdns/scripts
+        state: directory
+        owner: root
+        group: root
+        mode: 0755
+      notify: restart pdns
+
+    - name: Copy Lua app-routing script
+      ansible.builtin.copy:
+        src: scripts/app_routing.lua
+        dest: /opt/pdns/scripts/app_routing.lua
+        owner: root
+        group: root
+        mode: "0644"
+      notify: restart pdns
+
+    # Logrotate configuration
+    - name: Copy PowerDNS logrotate configuration
+      ansible.builtin.copy:
+        src: files/pdns_logrotate.conf
+        dest: /etc/logrotate.d/pdns
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Set DEPLOY_ENV environment variable
+      ansible.builtin.lineinfile:
+        path: /etc/environment
+        regexp: "^DEPLOY_ENV="
+        line: "DEPLOY_ENV={{ DEPLOY_ENV }}"
+        state: present
+
+    - name: Allow PowerDNS API access from cert server
+      ansible.builtin.shell: |
+        if ! ufw status numbered | grep -q "{{ api_ip }} 8081/tcp.*ALLOW IN.*{{ powerdns.cert_server_ip }}"; then
+          ufw allow from {{ powerdns.cert_server_ip }} to {{ api_ip }} port 8081 proto tcp comment 'PowerDNS API from cert server'
+          echo "CHANGED"
+        else
+          echo "OK"
+        fi
+      when: pdns_role == 'master'
+      register: ufw_result
+      changed_when: "'CHANGED' in ufw_result.stdout"
+
+    - name: Allow health check access from anywhere
+      ansible.builtin.shell: |
+        if ! ufw status numbered | grep -q "3000/tcp.*ALLOW IN.*Anywhere"; then
+          ufw allow 3000/tcp comment 'Health check service'
+          echo "CHANGED"
+        else
+          echo "OK"
+        fi
+      when: hostvars[inventory_hostname]['health_check_enabled'] | default(false)
+      register: ufw_health_result
+      changed_when: "'CHANGED' in ufw_health_result.stdout"
+
+    # Service management
+    - name: Validate PowerDNS configuration
+      command: pdns_server --config=check
+      register: config_check
+      failed_when: config_check.rc != 0
+      changed_when: false
+
+    - name: Ensure PowerDNS service is started and enabled
+      ansible.builtin.systemd:
+        name: pdns
+        state: started
+        enabled: yes
+      register: pdns_started
+
+    # Flush handlers to ensure PowerDNS restarts are completed before waiting/warming up
+    - name: Flush handlers to complete any PowerDNS restarts
+      ansible.builtin.meta: flush_handlers
+
+    - name: Wait for PowerDNS to start
+      wait_for:
+        port: 53
+        host: 127.0.0.1
+        delay: 5
+        timeout: 30
+      when: (pdns_restarted is defined and pdns_restarted.changed) or (pdns_started.changed)
+
+    - name: Warm up Lua geo-routing functions after PowerDNS restart
+      ansible.builtin.command:
+        cmd: dig @{{ hostvars[inventory_hostname]['public_ip'] | default(ansible_host) }} {{ item.domain }} A +short
+      loop: "{{ powerdns[env].zone_configs }}"
+      when:
+        - ((pdns_restarted is defined and pdns_restarted.changed) or (pdns_started.changed))
+        - item.template_vars.geo_routing | default(false)
+      failed_when: false
+      changed_when: false
+
+    - name: Ensure logrotate runs daily
+      ansible.builtin.cron:
+        name: "logrotate"
+        user: "root"
+        job: "/usr/sbin/logrotate /etc/logrotate.conf"
+        day: "*"
+        hour: "0"
+        minute: "0"
+
+    # Post-deployment verification
+
+    - name: Test DNS resolution for geo-routing domain
+      command: dig @127.0.0.1 cdn-geo.runonflux.io A +short
+      register: geo_dns_test
+      retries: 3
+      delay: 5
+      until: geo_dns_test.rc == 0
+      changed_when: false
+
+    - name: Test DNS resolution for app routing (production)
+      command: dig @127.0.0.1 test.app.runonflux.io CNAME +short
+      register: app_dns_test
+      retries: 3
+      delay: 5
+      until: app_dns_test.rc == 0
+      changed_when: false
+
+    # Master/Slave replication validation
+    - name: Test zone transfer from master (slave servers only)
+      command: dig @{{ powerdns[env].master_ips[0] }} {{ 'cdn-geodev.runonflux.io' if DEPLOY_ENV == 'staging' else 'cdn-geo.runonflux.io' }} AXFR
+      register: axfr_test
+      retries: 3
+      delay: 10
+      until: axfr_test.rc == 0
+      changed_when: false
+      when: pdns_role|default('slave') == 'slave'
+
+    - name: Validate PowerDNS database exists and is accessible
+      ansible.builtin.stat:
+        path: /var/lib/powerdns/pdns.sqlite3
+      register: pdns_db_check
+      failed_when: not pdns_db_check.stat.exists
+      when: pdns_role == 'master'
+
+    - name: Test DNS update capability on master servers
+      shell: |
+        pdnsutil list-zone {{ 'cdn-geodev.runonflux.io' if DEPLOY_ENV == 'staging' else 'cdn-geo.runonflux.io' }}
+      register: key_list_test
+      changed_when: false
+      when: pdns_role == 'master'
+
+    - name: Test DNS resolution for app routing (staging)
+      command: dig @127.0.0.1 test.app2.runonflux.io CNAME +short
+      register: app2_dns_test
+      retries: 3
+      delay: 5
+      until: app2_dns_test.rc == 0
+      changed_when: false
+      when: DEPLOY_ENV == 'staging'
+
+    - name: Display DNS test results
+      debug:
+        msg: |
+          Geo-routing test: {{ geo_dns_test.stdout }}
+          App routing (prod) test: {{ app_dns_test.stdout }}
+          App routing (staging) test: {{ app2_dns_test.stdout | default('N/A - prod environment') }}
