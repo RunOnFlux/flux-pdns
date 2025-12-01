@@ -2,4 +2,8 @@
 
 **/node_modules
 
-docker/results
+# Docker testing (removed from repo)
+docker/
+
+# Generated zone files (templates are source of truth)
+zones/

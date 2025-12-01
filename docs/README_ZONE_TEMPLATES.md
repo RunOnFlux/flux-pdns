@@ -117,10 +117,10 @@ The script automatically uses environment-specific settings from `vars.yaml`:
 - Zone configurations
 - Environment detection
 
-## Integration with Existing System
+## Integration with Deployment
 
-The template system is designed to coexist with existing zone files:
-- Existing zones in `zones/` are preserved
-- Template can recreate zones with identical content
-- Generated zones use same SOA format (YYYYMMDD00)
-- Same Lua routing configurations
+The template system generates zone files during Ansible deployment:
+- Zone files are generated on the remote server
+- Zones are imported into SQLite3 database via `pdnsutil load-zone`
+- Generated zones use SOA format (YYYYMMDD00)
+- Same Lua routing configurations as defined in `vars.yaml`
