@@ -6,7 +6,7 @@ This document describes the implementation of geographic DNS routing with automa
 
 The geo-routing system provides:
 - Geographic-based DNS resolution to direct clients to the nearest CDN server
-- Automatic health checking of CDN servers every 2 seconds
+- Automatic health checking of CDN servers every 15 seconds
 - Failover to the next closest server when a server goes down
 - 5-minute recovery period when servers come back online
 - Support for three global CDN locations
@@ -15,31 +15,32 @@ The geo-routing system provides:
 
 | Server | IP Address | Location | Hostname |
 |--------|------------|----------|----------|
-| CDN-6 | 107.152.47.137 | West Coast USA | cdn-6.runonflux.io |
-| CDN-1 | 5.39.57.50 | Dunkerque, EU | cdn-1.runonflux.io |
-| CDN-12 | 114.29.237.116 | Hong Kong, East Asia | cdn-12.runonflux.io |
+| CDN-1 | 89.58.31.71 | Germany, EU | cdn-1.runonflux.io |
+| CDN-2 | 107.175.82.227 | West Coast USA | cdn-2.runonflux.io |
+| CDN-3 | 180.188.197.165 | Hong Kong, Asia | cdn-3.runonflux.io |
 
 ## Architecture
 
-The implementation uses PowerDNS with the Bind backend and Lua Records to provide:
+The implementation uses PowerDNS with SQLite3 and GeoIP backends with Lua Records to provide:
 
-1. **Backend**: Bind backend replaces the previous pipe backend for better performance and reliability
+1. **Backend**: SQLite3 (`gsqlite3`) for zone storage + GeoIP (`geoip`) for geographic data
 2. **Health Checking**: The `ifportup()` function checks port 443 (HTTPS) on each CDN server
 3. **Geographic Routing**: The `pickclosest()` function uses MaxMind GeoIP databases to select the geographically nearest healthy server
-4. **Failover Logic**: Automatic failover after 3 failed health checks (6 seconds total)
+4. **Failover Logic**: Automatic failover after 3 failed health checks (45 seconds total)
 5. **Recovery Tracking**: 5-minute delay before re-adding recovered servers to the pool
 
 ## Configuration Files
 
-### 1. PowerDNS Main Configuration (`pdns-geo.conf.j2`)
+### 1. PowerDNS Main Configuration (`templates/pdns.conf.j2`)
 - Enables Lua records and configures health check intervals
-- Uses bind backend exclusively (pipe backend removed)
+- Uses gsqlite3 + geoip backends
 - Configures MaxMind GeoIP databases for location detection
 - GeoIP database path: `/usr/share/GeoIP/GeoLite2-City.mmdb`
 
-### 2. Lua Script (`scripts/geo_routing.lua`)
+### 2. Lua Script (`templates/geo_routing.lua.j2`)
+- Template that generates `/opt/pdns/scripts/geo_routing.lua` on deployment
 - Implements the `geoRoute()` function for A record queries
-- Tracks server recovery times
+- Server list is populated from `vars.yaml` geo_regions configuration
 - Provides fallback logic when all servers are down
 
 ### 3. Zone Files
@@ -57,10 +58,10 @@ The implementation uses PowerDNS with the Bind backend and Lua Records to provid
 
 ## Health Check Parameters
 
-- **Check Interval**: 2 seconds
+- **Check Interval**: 15 seconds
 - **Timeout**: 2 seconds per check
 - **Failure Threshold**: 3 consecutive failures
-- **Detection Time**: ~6 seconds (3 checks × 2 seconds)
+- **Detection Time**: ~45 seconds (3 checks × 15 seconds)
 - **Recovery Period**: 5 minutes after server comes back online
 
 ## Deployment
@@ -144,7 +145,7 @@ To test failover behavior:
 
 1. **Block a CDN server** (simulate failure):
    ```bash
-   sudo iptables -A OUTPUT -d 107.152.47.137 -j DROP
+   sudo iptables -A OUTPUT -d 107.175.82.227 -j DROP
    ```
 
 2. **Wait 6 seconds** for detection (3 failed checks)
@@ -157,7 +158,7 @@ To test failover behavior:
 
 4. **Restore access**:
    ```bash
-   sudo iptables -D OUTPUT -d 107.152.47.137 -j DROP
+   sudo iptables -D OUTPUT -d 107.175.82.227 -j DROP
    ```
 
 5. **Wait 5 minutes** for recovery period
@@ -178,9 +179,9 @@ Returns the IP of the geographically closest healthy CDN server.
 
 ### Direct Server Queries (for testing)
 ```bash
-dig cdn-6.runonflux.io A   # West Coast USA
-dig cdn-1.runonflux.io A   # Dunkerque, EU
-dig cdn-4.runonflux.io A   # Hong Kong, Asia
+dig cdn-1.runonflux.io A   # Germany, EU
+dig cdn-2.runonflux.io A   # West Coast USA
+dig cdn-3.runonflux.io A   # Hong Kong, Asia
 ```
 
 ## Troubleshooting
@@ -227,7 +228,7 @@ dig @your-server-ip _status.cdn-geo.runonflux.io TXT
 3. **GeoIP Database**: Automatically updated weekly via geoipupdate
 4. **Health Checks**: Monitor for false positives/negatives
 5. **Rate Limiting**: Consider implementing query rate limits
-6. **Backend Security**: Bind backend is more secure than pipe backend (no arbitrary script execution)
+6. **Backend Security**: SQLite3 backend with Lua records is more secure than pipe backend (no arbitrary script execution)
 
 ## Performance Tuning
 
@@ -265,9 +266,9 @@ sudo systemctl restart pdns
 ```
 
 ### Add/Remove CDN Servers
-1. Edit `/opt/pdns/scripts/geo_routing.lua`
-2. Update the `servers` table with new server information
-3. Restart PowerDNS: `sudo systemctl restart pdns`
+1. Edit `vars.yaml` and update the `geo_regions` section for the appropriate environment
+2. Redeploy with Ansible: `ansible-playbook -i hosts.yaml powerdns_setup.yaml -e "DEPLOY_ENV=<environment>"`
+3. The Lua script will be regenerated from `templates/geo_routing.lua.j2` with the new server list
 
 ## CI/CD Integration
 
