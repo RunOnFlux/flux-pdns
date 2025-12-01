@@ -34,7 +34,7 @@ log-dns-details=yes
 {% if server_role == 'master' %}
 # Security settings - Enable API for certbot
 webserver=yes
-webserver-address={{ hostvars[inventory_hostname]['health_check_bind_address'] | default(ansible_host) }}
+webserver-address={{ ansible_host }}
 webserver-port=8081
 webserver-allow-from=127.0.0.1,{{ powerdns.cert_server_ip }}
 api=yes
