@@ -32,7 +32,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          ref: github.event.inputs.branch
+          ref: ${{ github.event.inputs.branch }}
 
       - name: Setup Python
         uses: actions/setup-python@v6
