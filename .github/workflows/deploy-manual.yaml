@@ -73,15 +73,15 @@ jobs:
           TSIG_PRODUCTION_ZONE_TRANSFER_KEY: ${{ secrets.TSIG_PRODUCTION_ZONE_TRANSFER_KEY }}
           PDNS_API_STAGING_KEY: ${{ secrets.PDNS_API_STAGING_KEY }}
           PDNS_API_PRODUCTION_KEY: ${{ secrets.PDNS_API_PRODUCTION_KEY }}
-        run: >
-          ansible-playbook -i hosts.yaml
-            -e "DEPLOY_ENV=${{ github.event.inputs.environment }}"
-            -e "maxmind_account_id=$MAXMIND_ACCOUNT_ID"
-            -e "maxmind_license_key=$MAXMIND_LICENSE_KEY"
-            -e "tsig_staging_zone_transfer_key=$TSIG_STAGING_ZONE_TRANSFER_KEY"
-            -e "tsig_production_zone_transfer_key=$TSIG_PRODUCTION_ZONE_TRANSFER_KEY"
-            -e "pdns_api_staging_key=$PDNS_API_STAGING_KEY"
-            -e "pdns_api_production_key=$PDNS_API_PRODUCTION_KEY"
+        run: |
+          ansible-playbook -i hosts.yaml \
+            -e "DEPLOY_ENV=${{ github.event.inputs.environment }}" \
+            -e "maxmind_account_id=$MAXMIND_ACCOUNT_ID" \
+            -e "maxmind_license_key=$MAXMIND_LICENSE_KEY" \
+            -e "tsig_staging_zone_transfer_key=$TSIG_STAGING_ZONE_TRANSFER_KEY" \
+            -e "tsig_production_zone_transfer_key=$TSIG_PRODUCTION_ZONE_TRANSFER_KEY" \
+            -e "pdns_api_staging_key=$PDNS_API_STAGING_KEY" \
+            -e "pdns_api_production_key=$PDNS_API_PRODUCTION_KEY" \
             powerdns_setup.yaml
 
       - name: Run Deployment on single host
@@ -93,14 +93,14 @@ jobs:
           TSIG_PRODUCTION_ZONE_TRANSFER_KEY: ${{ secrets.TSIG_PRODUCTION_ZONE_TRANSFER_KEY }}
           PDNS_API_STAGING_KEY: ${{ secrets.PDNS_API_STAGING_KEY }}
           PDNS_API_PRODUCTION_KEY: ${{ secrets.PDNS_API_PRODUCTION_KEY }}
-        run: >
-          ansible-playbook
-            --limit ${{ github.event.inputs.host }}
-            -e "DEPLOY_ENV=${{ github.event.inputs.environment }}"
-            -e "maxmind_account_id=$MAXMIND_ACCOUNT_ID"
-            -e "maxmind_license_key=$MAXMIND_LICENSE_KEY"
-            -e "tsig_staging_zone_transfer_key=$TSIG_STAGING_ZONE_TRANSFER_KEY"
-            -e "tsig_production_zone_transfer_key=$TSIG_PRODUCTION_ZONE_TRANSFER_KEY"
-            -e "pdns_api_staging_key=$PDNS_API_STAGING_KEY"
-            -e "pdns_api_production_key=$PDNS_API_PRODUCTION_KEY"
+        run: |
+          ansible-playbook -i hosts.yaml \
+            --limit ${{ github.event.inputs.host }} \
+            -e "DEPLOY_ENV=${{ github.event.inputs.environment }}" \
+            -e "maxmind_account_id=$MAXMIND_ACCOUNT_ID" \
+            -e "maxmind_license_key=$MAXMIND_LICENSE_KEY" \
+            -e "tsig_staging_zone_transfer_key=$TSIG_STAGING_ZONE_TRANSFER_KEY" \
+            -e "tsig_production_zone_transfer_key=$TSIG_PRODUCTION_ZONE_TRANSFER_KEY" \
+            -e "pdns_api_staging_key=$PDNS_API_STAGING_KEY" \
+            -e "pdns_api_production_key=$PDNS_API_PRODUCTION_KEY" \
             powerdns_setup.yaml
