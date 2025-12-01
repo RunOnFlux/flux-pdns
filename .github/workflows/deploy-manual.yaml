@@ -66,10 +66,10 @@ jobs:
         run: >
           ansible-playbook -i hosts.yaml
             -e "DEPLOY_ENV=staging"
-            -e "maxmind.account_id=$MAXMIND_ACCOUNT_ID"
-            -e "maxmind.license_key=$MAXMIND_LICENSE_KEY"
-            -e "powerdns.staging.tsig_zone_transfer_key=$TSIG_STAGING_ZONE_TRANSFER_KEY"
-            -e "powerdns.staging.api_key=$PDNS_API_STAGING_KEY"
+            -e "maxmind_account_id=$MAXMIND_ACCOUNT_ID"
+            -e "maxmind_license_key=$MAXMIND_LICENSE_KEY"
+            -e "tsig_staging_zone_transfer_key=$TSIG_STAGING_ZONE_TRANSFER_KEY"
+            -e "pdns_api_staging_key=$PDNS_API_STAGING_KEY"
             powerdns_setup.yaml
 
       - name: Run Deployment on single dev host
@@ -83,8 +83,8 @@ jobs:
           ansible-playbook
             --limit ${{ github.event.inputs.host }}
             -e "DEPLOY_ENV=staging"
-            -e "maxmind.account_id=$MAXMIND_ACCOUNT_ID"
-            -e "maxmind.license_key=$MAXMIND_LICENSE_KEY"
-            -e "powerdns.staging.tsig_zone_transfer_key=$TSIG_STAGING_ZONE_TRANSFER_KEY"
-            -e "powerdns.staging.api_key=$PDNS_API_STAGING_KEY"
+            -e "maxmind_account_id=$MAXMIND_ACCOUNT_ID"
+            -e "maxmind_license_key=$MAXMIND_LICENSE_KEY"
+            -e "tsig_staging_zone_transfer_key=$TSIG_STAGING_ZONE_TRANSFER_KEY"
+            -e "pdns_api_staging_key=$PDNS_API_STAGING_KEY"
             powerdns_setup.yaml
