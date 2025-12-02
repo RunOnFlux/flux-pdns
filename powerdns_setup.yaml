@@ -560,6 +560,18 @@
       register: ufw_result
       changed_when: "'CHANGED' in ufw_result.stdout"
 
+    - name: Allow PowerDNS API access from localhost
+      ansible.builtin.shell: |
+        if ! ufw status numbered | grep -q "{{ api_ip }} 8081/tcp.*ALLOW IN.*127.0.0.1"; then
+          ufw allow from 127.0.0.1 to {{ api_ip }} port 8081 proto tcp comment 'PowerDNS API from localhost'
+          echo "CHANGED"
+        else
+          echo "OK"
+        fi
+      when: pdns_role == 'master'
+      register: ufw_localhost_result
+      changed_when: "'CHANGED' in ufw_localhost_result.stdout"
+
     - name: Allow health check access from anywhere
       ansible.builtin.shell: |
         if ! ufw status numbered | grep -q "3000/tcp.*ALLOW IN.*Anywhere"; then
