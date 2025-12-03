@@ -56,16 +56,19 @@
         cmd: gpg --dearmor < /tmp/powerdns-key.asc > /etc/apt/keyrings/powerdns.gpg
         creates: /etc/apt/keyrings/powerdns.gpg
 
+    - name: Remove old PowerDNS repository files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/sources.list.d/repo_powerdns_com_ubuntu.list
+        - /etc/apt/sources.list.d/powerdns.list
+
     - name: Add PowerDNS repository
       ansible.builtin.apt_repository:
         repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/powerdns.gpg] http://repo.powerdns.com/ubuntu {{ ansible_distribution_release }}-auth-{{ powerdns.auth_version }} main"
         state: present
         filename: powerdns
-
-    - name: Remove old PowerDNS repository file
-      ansible.builtin.file:
-        path: /etc/apt/sources.list.d/repo_powerdns_com_ubuntu.list
-        state: absent
 
     - name: Update apt cache
       ansible.builtin.apt:
