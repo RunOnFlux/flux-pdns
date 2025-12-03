@@ -40,10 +40,10 @@ const config = {
 // Test app routing functionality
 async function testAppRouting() {
   const testDomains = [
-    'web.' + config.app_domain,
-    'test.' + config.app_domain, 
-    'app123.' + config.app_domain,
-    'xyz99.' + config.app_domain
+    'app.' + config.app_domain,      // a -> lb-1
+    'hello.' + config.app_domain,    // h -> lb-2
+    'test.' + config.app_domain,     // t -> lb-3
+    'web.' + config.app_domain       // w -> lb-4
   ];
   
   const result = {
