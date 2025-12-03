@@ -215,11 +215,10 @@
         - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
 
     - name: PREFLIGHT - Check if healthcheck user exists
-      ansible.builtin.getent:
-        database: passwd
-        key: healthcheck
+      ansible.builtin.command: id -u healthcheck
       register: healthcheck_user_check
       failed_when: false
+      changed_when: false
       when:
         - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
 
@@ -227,7 +226,7 @@
       ansible.builtin.set_fact:
         needs_pm2_migration: "{{ pm2_installed.rc == 0 and pm2_healthchecker_running.rc == 0 }}"
         pm2_systemd_enabled: "{{ pm2_systemd_service.status.LoadState | default('not-found') != 'not-found' }}"
-        healthcheck_user_exists: "{{ healthcheck_user_check.failed is defined and not healthcheck_user_check.failed }}"
+        healthcheck_user_exists: "{{ healthcheck_user_check.rc == 0 }}"
       when:
         - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
 
