@@ -265,13 +265,17 @@
         - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
 
     # Phase 3: PM2 Migration Path - Stage files before stopping PM2
-    - name: MIGRATION - Create staging directory for PM2 migration
+    - name: MIGRATION - Create staging directories for PM2 migration
       ansible.builtin.file:
-        path: /opt/healthchecker/staging
+        path: "{{ item }}"
         state: directory
         owner: healthcheck
         group: healthcheck
         mode: "0755"
+      loop:
+        - /opt/healthchecker/staging
+        - /opt/healthchecker/staging/routes
+        - /opt/healthchecker/staging/bin
       when:
         - hostvars[inventory_hostname]['health_check_enabled'] | default(false)
         - needs_pm2_migration | default(false)
