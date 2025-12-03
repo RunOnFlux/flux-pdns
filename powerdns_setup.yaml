@@ -596,6 +596,13 @@
         zone_serial: "{{ ansible_date_time.date | regex_replace('-', '') }}00"
       when: pdns_role == 'master'
 
+    - name: Create temporary zones directory for zone file generation
+      ansible.builtin.file:
+        path: zones
+        state: directory
+        mode: "0755"
+      when: pdns_role == 'master'
+
     - name: Check if zones exist
       ansible.builtin.shell: |
         sqlite3 /var/lib/powerdns/pdns.sqlite3 "SELECT COUNT(*) FROM domains WHERE name='{{ zone.domain }}';"
