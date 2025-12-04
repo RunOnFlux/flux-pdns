@@ -18,6 +18,11 @@ geoip-database-files=mmdb:/usr/share/GeoIP/GeoLite2-City.mmdb;mode=mmap;language
 # EDNS Client Subnet for better geo-location accuracy
 edns-subnet-processing=yes
 
+# Disable consistent-backends for location-based records
+# When enabled, PowerDNS uses ANY queries which cannot be cached correctly
+# for geo-routing responses with non-zero ECS scope
+consistent-backends=no
+
 # Performance and caching settings
 cache-ttl=60
 negquery-cache-ttl=60
@@ -34,7 +39,7 @@ log-dns-details=yes
 {% if server_role == 'master' %}
 # Security settings - Enable API for certbot
 webserver=yes
-webserver-address={{ hostvars[inventory_hostname]['health_check_bind_address'] | default(ansible_host) }}
+webserver-address={{ ansible_host }}
 webserver-port=8081
 webserver-allow-from=127.0.0.1,{{ powerdns.cert_server_ip }}
 api=yes
