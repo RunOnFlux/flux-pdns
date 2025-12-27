@@ -15,7 +15,7 @@ powerdns:
             - name: "eu-central"
               description: "Germany EU"
               server: "cdn-1.runonflux.io"
-              ip: "89.58.31.71"
+              ip: "159.195.85.44"
             - name: "us-west"
               description: "West Coast USA"
               server: "cdn-2.runonflux.io"
@@ -39,9 +39,9 @@ powerdns:
     master_ips: ["5.39.57.39"]
     slave_ips: ["5.161.41.40"]
     # TSIG key for zone transfers (generate with: openssl rand -base64 48)
-    tsig_zone_transfer_key: "REPLACE_WITH_STAGING_ZONE_TRANSFER_KEY"
+    tsig_zone_transfer_key: "{{ tsig_staging_zone_transfer_key | default('REPLACE_WITH_STAGING_ZONE_TRANSFER_KEY') }}"
     # API key for certbot (generate with: openssl rand -base64 32)
-    api_key: "REPLACE_WITH_STAGING_API_KEY"
+    api_key: "{{ pdns_api_staging_key | default('REPLACE_WITH_STAGING_API_KEY') }}"
 
   production:
     zone_configs:
@@ -55,7 +55,7 @@ powerdns:
             - name: "eu-central"
               description: "Germany EU"
               server: "cdn-1.runonflux.io"
-              ip: "89.58.31.71"
+              ip: "159.195.85.44"
             - name: "us-west"
               description: "West Coast USA"
               server: "cdn-2.runonflux.io"
@@ -79,10 +79,10 @@ powerdns:
     master_ips: ["5.39.57.38"]
     slave_ips: ["5.161.203.77", "178.128.30.247"]
     # TSIG key for zone transfers (generate with: openssl rand -base64 48)
-    tsig_zone_transfer_key: "REPLACE_WITH_PRODUCTION_ZONE_TRANSFER_KEY"
+    tsig_zone_transfer_key: "{{ tsig_production_zone_transfer_key | default('REPLACE_WITH_PRODUCTION_ZONE_TRANSFER_KEY') }}"
     # API key for certbot (generate with: openssl rand -base64 32)
-    api_key: "REPLACE_WITH_PRODUCTION_API_KEY"
+    api_key: "{{ pdns_api_production_key | default('REPLACE_WITH_PRODUCTION_API_KEY') }}"
 
 maxmind:
-  account_id: "YOUR_ACCOUNT_ID"
-  license_key: "YOUR_LICENSE_KEY"
+  account_id: "{{ maxmind_account_id | default('YOUR_ACCOUNT_ID') }}"
+  license_key: "{{ maxmind_license_key | default('YOUR_LICENSE_KEY') }}"

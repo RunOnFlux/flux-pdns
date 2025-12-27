@@ -16,10 +16,12 @@ const resolveNs = promisify(resolver.resolveNs.bind(resolver));
 // Configuration based on environment
 {% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
 {% set geo_ips = [] %}
+{% set geo_region_names = [] %}
 {% for zone_config in powerdns[env].zone_configs %}
   {% if zone_config.template_vars.geo_routing | default(false) %}
     {% for region in zone_config.template_vars.geo_regions | default([]) %}
       {% set _ = geo_ips.append(region.ip) %}
+      {% set _ = geo_region_names.append(region.name) %}
     {% endfor %}
   {% endif %}
 {% endfor %}
@@ -31,16 +33,17 @@ const config = {
     production: ['fdm-lb-1-1.runonflux.io', 'fdm-lb-1-2.runonflux.io', 'fdm-lb-1-3.runonflux.io', 'fdm-lb-1-4.runonflux.io']
   },
   expected_cdn_ips: [{% for ip in geo_ips %}'{{ ip }}'{{ ", " if not loop.last else "" }}{% endfor %}],
+  geo_regions: [{% for name in geo_region_names %}'{{ name }}'{{ ", " if not loop.last else "" }}{% endfor %}],
   environment: '{{ DEPLOY_ENV }}'
 };
 
 // Test app routing functionality
 async function testAppRouting() {
   const testDomains = [
-    'web.' + config.app_domain,
-    'test.' + config.app_domain, 
-    'app123.' + config.app_domain,
-    'xyz99.' + config.app_domain
+    'app.' + config.app_domain,      // a -> lb-1
+    'hello.' + config.app_domain,    // h -> lb-2
+    'test.' + config.app_domain,     // t -> lb-3
+    'web.' + config.app_domain       // w -> lb-4
   ];
   
   const result = {
@@ -129,7 +132,7 @@ async function testGeoRouting() {
   }
 
   // Test health check records for each region
-  const regions = ['us-west', 'eu-west', 'asia-east'];
+  const regions = config.geo_regions;
   for (const region of regions) {
     try {
       result.health_records++;
