@@ -7,10 +7,18 @@ powerdns:
   # rebuilt host lands on whatever the repo serves that day while its peers stay
   # where they were.
   #
-  # The suffix travels with the release line and cannot be derived from
-  # ansible_distribution_release — the 4.9 line is built for `noble`, the 5.0
-  # line for `ubuntu24.04`. Change this whenever auth_version changes.
-  auth_package_version: "5.0.6-1pdns.ubuntu24.04"
+  # Keyed by distro release because the fleet is not homogeneous: the EU primary
+  # is noble, the US secondary is jammy. The suffix is also not derivable, since
+  # its form changes between release lines - the 4.9 line names the codename
+  # (4.9.8-1pdns.jammy) while the 5.0 line names the version
+  # (5.0.6-1pdns.ubuntu22.04). Spelling each one out keeps it honest against
+  # both axes.
+  #
+  # A host whose release is not listed here fails the run on an undefined key.
+  # That is deliberate: refusing to deploy beats guessing a version string.
+  auth_package_version:
+    noble: "5.0.6-1pdns.ubuntu24.04"
+    jammy: "5.0.6-1pdns.ubuntu22.04"
   cert_server_ip: "10.100.0.172"
 
   staging:

@@ -99,9 +99,9 @@
     - name: Install PowerDNS at the pinned version
       ansible.builtin.apt:
         name:
-          - "pdns-server={{ powerdns.auth_package_version }}"
-          - "pdns-backend-sqlite3={{ powerdns.auth_package_version }}"
-          - "pdns-backend-geoip={{ powerdns.auth_package_version }}"
+          - "pdns-server={{ powerdns.auth_package_version[ansible_distribution_release] }}"
+          - "pdns-backend-sqlite3={{ powerdns.auth_package_version[ansible_distribution_release] }}"
+          - "pdns-backend-geoip={{ powerdns.auth_package_version[ansible_distribution_release] }}"
         state: present
         allow_downgrade: true
 
