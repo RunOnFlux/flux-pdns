@@ -91,12 +91,23 @@
         state: stopped
         enabled: no
 
+    # Pinned separately from the OS packages below: the version is declared, not
+    # inherited from whatever the repo happens to serve. allow_downgrade makes the
+    # pin authoritative in both directions, so reverting the variable reverts the
+    # fleet. The backends carry Depends: pdns-server (= exact version), so apt
+    # moves all three together or refuses — it cannot leave a mismatched set.
+    - name: Install PowerDNS at the pinned version
+      ansible.builtin.apt:
+        name:
+          - "pdns-server={{ powerdns.auth_package_version }}"
+          - "pdns-backend-sqlite3={{ powerdns.auth_package_version }}"
+          - "pdns-backend-geoip={{ powerdns.auth_package_version }}"
+        state: present
+        allow_downgrade: true
+
     - name: Install required packages
       ansible.builtin.package:
         name:
-          - pdns-server
-          - pdns-backend-sqlite3
-          - pdns-backend-geoip
           - python3
           - logrotate
           - nginx

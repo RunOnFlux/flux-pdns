@@ -1,6 +1,16 @@
 # PowerDNS Configuration Variables
 powerdns:
   auth_version: "49"
+  # Exact package version for the pdns packages. Without a pin, the version a
+  # host receives depends on when it was first built: the install is
+  # state: present, which never touches a package that is already there, so a
+  # rebuilt host lands on whatever the repo serves that day while its peers stay
+  # where they were.
+  #
+  # The suffix travels with the release line and cannot be derived from
+  # ansible_distribution_release — the 4.9 line is built for `noble`, the 5.0
+  # line for `ubuntu24.04`. Change this whenever auth_version changes.
+  auth_package_version: "4.9.16-1pdns.noble"
   cert_server_ip: "10.100.0.172"
 
   staging:
