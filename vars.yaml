@@ -91,9 +91,13 @@ powerdns:
           routing_script: "app_routing.lua"
           routing_function: "appRouteCname"
           debug_function: "appRouteDebug"
-    soa_nameserver: "pdns1.runonflux.io."
+    # The name the parent zone delegates to, and the only one of ours that
+    # resolves. pdns1.runonflux.io has no records of any type, so a resolver that
+    # took the zone's own NS set — which outranks the delegation under RFC 2181
+    # §5.4.1 — would be left with no reachable nameserver for the zone.
+    soa_nameserver: "pdns.runonflux.io."
     soa_email: "hostmaster.runonflux.io."
-    nameservers: ["pdns1.runonflux.io."]
+    nameservers: ["pdns.runonflux.io."]
     master_ips: ["5.39.57.38"]
     slave_ips: ["5.161.203.77", "178.128.30.247"]
     # TSIG key for zone transfers (generate with: openssl rand -base64 48)

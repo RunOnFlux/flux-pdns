@@ -87,6 +87,22 @@ allow-axfr-ips=127.0.0.1
 {% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
 also-notify={{ powerdns[env].slave_ips | join(',') }}
 
+# How often the primary scans its own SOA serials to notice there is anything to
+# notify about. also-notify above only says WHERE a notification goes; this says
+# how quickly one is sent at all, and unset it defaults to 60s.
+#
+# That delay is client-visible, because the parent delegates geographically and
+# US and APAC clients are served by the secondaries. Until a transfer lands, a
+# name that already exists on the primary is answered by those secondaries from
+# the zone wildcard — a CNAME to a proxy, at the zone's hour-long TTL. Measured
+# at 45s on the default; a write followed by an explicit API notify converges in
+# under 4.
+#
+# The cost is a per-zone serial scan every 10s on the primary, which scales with
+# zone count and is negligible here. Secondaries do not poll more often as a
+# result; their REFRESH governs that.
+xfr-cycle-interval=10
+
 # Enable DNS updates for ACME challenges
 dnsupdate=yes
 allow-dnsupdate-from=127.0.0.1
