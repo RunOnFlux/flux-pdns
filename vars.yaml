@@ -21,6 +21,25 @@ powerdns:
     jammy: "5.0.6-1pdns.ubuntu22.04"
   cert_server_ip: "10.100.0.172"
 
+  # Health check behind the geo-routing Lua (see templates/geo_routing.lua.j2).
+  #
+  # This replaced ifportup(443, ...), which only proved that something accepted
+  # TCP on 443. When cdn-2 was shut down for non-payment its provider re-leased
+  # the IP to another tenant who also ran nginx on 443, so the check kept
+  # reporting the node healthy and US traffic was routed to a stranger's server
+  # for as long as it took someone to notice. Matching a token we serve makes the
+  # check answer "is this still our node", not merely "is a socket open".
+  geo_health_check:
+    # Probed against each candidate IP in turn, with this hostname as Host/SNI.
+    # It must be a vhost that every candidate node serves. cdn.runonflux.io (the
+    # cdn-aliases vhost) qualifies in both environments; the per-zone names do
+    # not - cdn-geodev.runonflux.io is not served by cdn-1 or cdn-3, so using it
+    # here would mark every node down and take the zone out entirely.
+    url: "https://cdn.runonflux.io/health"
+    # Token from cdn-locations.conf.j2 in flux-cdn-deploy. Deliberately
+    # distinctive so a recycled IP cannot satisfy the check by accident.
+    stringmatch: "flux-cdn-healthy"
+
   staging:
     zone_configs:
       - domain: "cdn-geodev.runonflux.io"
@@ -29,15 +48,17 @@ powerdns:
           default_ttl: "300"
           geo_routing: true
           lua_routing: false
+          # No us-west region: cdn-2.runonflux.io (107.175.82.227) was removed on
+          # 2026-07-29 after the server was shut down for non-payment and the
+          # provider re-leased its IP to another tenant. US clients now resolve
+          # to whichever of the remaining nodes pickclosest favours. Restoring a
+          # US region means adding it back here with a new address - do not
+          # reuse the old one.
           geo_regions:
             - name: "eu-central"
               description: "Germany EU"
               server: "cdn-1.runonflux.io"
               ip: "159.195.85.44"
-            - name: "us-west"
-              description: "West Coast USA"
-              server: "cdn-2.runonflux.io"
-              ip: "107.175.82.227"
             - name: "as-east"
               description: "Hong Kong Asia"
               server: "cdn-3.runonflux.io"
@@ -69,15 +90,17 @@ powerdns:
           default_ttl: "300"
           geo_routing: true
           lua_routing: false
+          # No us-west region: cdn-2.runonflux.io (107.175.82.227) was removed on
+          # 2026-07-29 after the server was shut down for non-payment and the
+          # provider re-leased its IP to another tenant. US clients now resolve
+          # to whichever of the remaining nodes pickclosest favours. Restoring a
+          # US region means adding it back here with a new address - do not
+          # reuse the old one.
           geo_regions:
             - name: "eu-central"
               description: "Germany EU"
               server: "cdn-1.runonflux.io"
               ip: "159.195.85.44"
-            - name: "us-west"
-              description: "West Coast USA"
-              server: "cdn-2.runonflux.io"
-              ip: "107.175.82.227"
             - name: "as-east"
               description: "Hong Kong Asia"
               server: "cdn-3.runonflux.io"
