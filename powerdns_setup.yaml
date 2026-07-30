@@ -885,6 +885,102 @@
         hour: "0"
         minute: "0"
 
+    # Zone record reconcile
+    #
+    # The zone generation and import tasks earlier in this play are gated on the
+    # zone being ABSENT from SQLite, so everything zone.template.j2 writes -
+    # _health.* TXT, apex NS, SOA MNAME - lands once, at creation, and never
+    # again. Editing vars.yaml afterwards changes nothing while the run still
+    # reports success. That gate cannot simply be dropped, because the import is
+    # `pdnsutil load-zone`, which replaces the entire zone and would take the
+    # ~170 app A records and any in-flight _acme-challenge TXT with it.
+    #
+    # These tasks reconcile the template-owned records individually instead, on
+    # every run, and leave everything else alone. They come after the service is
+    # up because they work through the HTTP API, and run only on the primary -
+    # secondaries have api=no and receive these changes by AXFR.
+    - name: Wait for the PowerDNS API to accept connections
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: 8081
+        timeout: 30
+      when: pdns_role == 'master'
+
+    - name: Install the zone record reconcile script
+      ansible.builtin.copy:
+        src: scripts/reconcile_zone_records.py
+        dest: /opt/pdns/scripts/reconcile_zone_records.py
+        owner: root
+        group: root
+        mode: "0755"
+      when: pdns_role == 'master'
+
+    - name: Render desired state for template-owned zone records
+      ansible.builtin.template:
+        src: templates/reconcile_desired.json.j2
+        dest: /run/pdns-reconcile-desired.json
+        owner: root
+        group: root
+        mode: "0600"
+      when: pdns_role == 'master'
+
+    # no_log because the API key is passed in the environment. The script itself
+    # never prints it, so the report and any error are surfaced by the two tasks
+    # below without exposing anything.
+    - name: Reconcile template-owned zone records
+      ansible.builtin.command:
+        argv: "{{ reconcile_argv + (['--dry-run'] if ansible_check_mode else []) }}"
+      vars:
+        reconcile_argv:
+          - /opt/pdns/scripts/reconcile_zone_records.py
+          - "--zone"
+          - "{{ item.domain }}"
+          - "--api-url"
+          - "http://{{ ansible_host }}:8081"
+          - "--desired"
+          - /run/pdns-reconcile-desired.json
+      environment:
+        PDNS_API_KEY: "{{ powerdns[env].api_key }}"
+      loop: "{{ powerdns[env].zone_configs }}"
+      loop_control:
+        label: "{{ item.domain }}"
+      register: reconcile_result
+      # Collected and raised below, so that every zone is attempted and the
+      # report is printed before the play stops.
+      failed_when: false
+      changed_when:
+        - reconcile_result.rc == 0
+        - (reconcile_result.stdout | from_json).changed | default(false)
+      check_mode: false
+      no_log: true
+      when: pdns_role == 'master'
+
+    - name: Report zone record reconcile
+      ansible.builtin.debug:
+        msg: "{{ item.stdout | from_json }}"
+      loop: "{{ reconcile_result.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.domain }}"
+      when:
+        - pdns_role == 'master'
+        - item.stdout | default('') != ''
+
+    # rc 2 is LUA record drift, where nothing was written and a human should
+    # look before anything is. rc 1 is an error. Neither is something to carry
+    # on past: every bug in the 2026-07-29 outage was a conditional that quietly
+    # did the wrong thing while the run reported success.
+    - name: Fail if any zone did not reconcile
+      ansible.builtin.fail:
+        msg: >-
+          Zone record reconcile failed for {{ item.item.domain }} (rc={{ item.rc }}).
+          {{ item.stdout | default('') }} {{ item.stderr | default('') }}
+      loop: "{{ reconcile_result.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.domain }}"
+      when:
+        - pdns_role == 'master'
+        - item.rc | default(0) != 0
+
     # Post-deployment verification
 
     - name: Test DNS resolution for geo-routing domain

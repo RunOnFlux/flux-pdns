@@ -55,6 +55,11 @@ HEALTH_PREFIX = "_health."
 
 SOA_FIELDS = 7
 
+# A TXT string longer than this is split into several quoted chunks in the
+# rdata, so what we sent and what comes back would never compare equal and the
+# reconcile would report a change on every single run. Refuse instead.
+MAX_TXT_STRING = 255
+
 
 class ReconcileError(RuntimeError):
     """Anything that should fail the play rather than be worked around."""
@@ -153,10 +158,17 @@ def compute_changes(zone: str, existing: dict, desired: dict) -> list:
     # TTL is 300 in zone.template.j2 independently of the zone default, so it is
     # carried separately rather than derived from apex_ttl.
     health_ttl = int(desired.get("health_ttl", 300))
-    want_health = {
-        canonical("_health.{}.{}".format(r["region"], zone)): txt_rdata(r["content"])
-        for r in desired.get("health_records", [])
-    }
+    want_health = {}
+    for region in desired.get("health_records", []):
+        if len(region["content"]) > MAX_TXT_STRING:
+            raise ReconcileError(
+                "_health.{} content is {} bytes, over the {}-byte TXT string limit; "
+                "PowerDNS would split it into chunks and this would never converge".format(
+                    region["region"], len(region["content"]), MAX_TXT_STRING
+                )
+            )
+        name = canonical("_health.{}.{}".format(region["region"], zone))
+        want_health[name] = txt_rdata(region["content"])
 
     for name in sorted(want_health):
         rrset = existing.get((name, "TXT"))

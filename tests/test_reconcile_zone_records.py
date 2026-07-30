@@ -126,6 +126,33 @@ def changed_names(patch):
     return {(r["name"], r["type"]) for r in patch}
 
 
+def apply_patch(zone_data, patch, new_serial="2026073001"):
+    """Stand-in for what the API does to the zone, so a second pass can be checked.
+
+    Also rewrites the SOA serial the way SOA-EDIT-API DEFAULT does on any write,
+    because the reconcile has to stay quiet about a serial it did not choose.
+    """
+    rrsets = {(r["name"], r["type"]): copy.deepcopy(r) for r in zone_data["rrsets"]}
+    for change in patch:
+        key = (change["name"], change["type"])
+        if change["changetype"] == "DELETE":
+            rrsets.pop(key, None)
+            continue
+        rrsets[key] = {
+            "name": change["name"],
+            "type": change["type"],
+            "ttl": change["ttl"],
+            "records": [dict(r) for r in change["records"]],
+        }
+    if patch:
+        soa = rrsets.get((canonical(zone_data["name"]), "SOA"))
+        if soa is not None:
+            fields = soa["records"][0]["content"].split()
+            fields[2] = new_serial
+            soa["records"][0]["content"] = " ".join(fields)
+    return {"name": zone_data["name"], "rrsets": list(rrsets.values())}
+
+
 # --------------------------------------------------------------------------
 # Idempotency. If this breaks, everything else is noise.
 # --------------------------------------------------------------------------
@@ -465,6 +492,91 @@ def test_undotted_vars_still_compare_equal():
     desired["soa_mname"] = "pdns.runonflux.io"
     desired["nameservers"] = ["pdns.runonflux.io"]
     assert compute_changes(GEO_ZONE, index_rrsets(geo_zone_data()), desired) == []
+
+
+# --------------------------------------------------------------------------
+# Convergence. A reconcile that runs on every deploy must settle after one
+# pass - otherwise it bumps the serial and notifies the secondaries forever.
+# --------------------------------------------------------------------------
+
+
+def _drift_everything():
+    zone = geo_zone_data()
+    for rrset in zone["rrsets"]:
+        if rrset["type"] == "NS":
+            rrset["records"] = [{"content": "pdns1.runonflux.io.", "disabled": False}]
+        if rrset["type"] == "SOA":
+            rrset["records"][0]["content"] = (
+                "pdns1.runonflux.io. old.runonflux.io. 2026062804 3600 600 86400 300"
+            )
+        if rrset["name"].startswith("_health.eu-central"):
+            rrset["records"][0]["content"] = '"Germany EU - cdn-1.runonflux.io - 89.58.31.71"'
+            rrset["ttl"] = 60
+    zone["rrsets"].append(
+        {
+            "name": "_health.us-west." + GEO_ZONE,
+            "type": "TXT",
+            "ttl": 300,
+            "records": [{"content": '"US West - cdn-2 - 107.175.82.227"', "disabled": False}],
+        }
+    )
+    return zone
+
+
+@pytest.mark.parametrize(
+    "make_zone",
+    [
+        geo_zone_data,
+        _drift_everything,
+        lambda: {
+            "name": GEO_ZONE,
+            "rrsets": [r for r in geo_zone_data()["rrsets"] if r["type"] != "TXT"],
+        },
+    ],
+    ids=["already-clean", "everything-drifted", "health-records-missing"],
+)
+def test_second_pass_proposes_nothing(make_zone):
+    zone = make_zone()
+    first = compute_changes(GEO_ZONE, index_rrsets(zone), geo_desired())
+    settled = apply_patch(zone, first)
+    assert compute_changes(GEO_ZONE, index_rrsets(settled), geo_desired()) == []
+
+
+def test_third_pass_also_proposes_nothing():
+    """Guards against a two-cycle oscillation that a single re-run would miss."""
+    zone = _drift_everything()
+    for _ in range(3):
+        patch = compute_changes(GEO_ZONE, index_rrsets(zone), geo_desired())
+        zone = apply_patch(zone, patch)
+    assert compute_changes(GEO_ZONE, index_rrsets(zone), geo_desired()) == []
+
+
+def test_a_rewritten_serial_does_not_look_like_drift():
+    """PowerDNS chooses the serial on every API write. If the reconcile compared
+    it, every run would rewrite the SOA and notify the secondaries."""
+    zone = geo_zone_data()
+    for rrset in zone["rrsets"]:
+        if rrset["type"] == "SOA":
+            fields = rrset["records"][0]["content"].split()
+            fields[2] = "2026073099"
+            rrset["records"][0]["content"] = " ".join(fields)
+    assert compute_changes(GEO_ZONE, index_rrsets(zone), geo_desired()) == []
+
+
+def test_oversized_health_content_is_refused():
+    """PowerDNS splits a TXT string over 255 bytes into chunks, which would never
+    compare equal - an infinite loop of writes. Fail instead."""
+    desired = geo_desired()
+    desired["health_records"][0]["content"] = "x" * 256
+    with pytest.raises(ReconcileError, match="255-byte TXT string limit"):
+        compute_changes(GEO_ZONE, index_rrsets(geo_zone_data()), desired)
+
+
+def test_health_content_at_the_limit_is_allowed():
+    desired = geo_desired()
+    desired["health_records"][0]["content"] = "x" * 255
+    patch = compute_changes(GEO_ZONE, index_rrsets(geo_zone_data()), desired)
+    assert len(patch) == 1
 
 
 def test_input_zone_data_is_not_mutated():
