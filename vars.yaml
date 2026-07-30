@@ -1,7 +1,44 @@
 # PowerDNS Configuration Variables
 powerdns:
-  auth_version: "49"
+  auth_version: "50"
+  # Exact package version for the pdns packages. Without a pin, the version a
+  # host receives depends on when it was first built: the install is
+  # state: present, which never touches a package that is already there, so a
+  # rebuilt host lands on whatever the repo serves that day while its peers stay
+  # where they were.
+  #
+  # Keyed by distro release because the fleet is not homogeneous: the EU primary
+  # is noble, the US secondary is jammy. The suffix is also not derivable, since
+  # its form changes between release lines - the 4.9 line names the codename
+  # (4.9.8-1pdns.jammy) while the 5.0 line names the version
+  # (5.0.6-1pdns.ubuntu22.04). Spelling each one out keeps it honest against
+  # both axes.
+  #
+  # A host whose release is not listed here fails the run on an undefined key.
+  # That is deliberate: refusing to deploy beats guessing a version string.
+  auth_package_version:
+    noble: "5.0.6-1pdns.ubuntu24.04"
+    jammy: "5.0.6-1pdns.ubuntu22.04"
   cert_server_ip: "10.100.0.172"
+
+  # Health check behind the geo-routing Lua (see templates/geo_routing.lua.j2).
+  #
+  # This replaced ifportup(443, ...), which only proved that something accepted
+  # TCP on 443. When cdn-2 was shut down for non-payment its provider re-leased
+  # the IP to another tenant who also ran nginx on 443, so the check kept
+  # reporting the node healthy and US traffic was routed to a stranger's server
+  # for as long as it took someone to notice. Matching a token we serve makes the
+  # check answer "is this still our node", not merely "is a socket open".
+  geo_health_check:
+    # Probed against each candidate IP in turn, with this hostname as Host/SNI.
+    # It must be a vhost that every candidate node serves. cdn.runonflux.io (the
+    # cdn-aliases vhost) qualifies in both environments; the per-zone names do
+    # not - cdn-geodev.runonflux.io is not served by cdn-1 or cdn-3, so using it
+    # here would mark every node down and take the zone out entirely.
+    url: "https://cdn.runonflux.io/health"
+    # Token from cdn-locations.conf.j2 in flux-cdn-deploy. Deliberately
+    # distinctive so a recycled IP cannot satisfy the check by accident.
+    stringmatch: "flux-cdn-healthy"
 
   staging:
     zone_configs:
@@ -11,15 +48,17 @@ powerdns:
           default_ttl: "300"
           geo_routing: true
           lua_routing: false
+          # No us-west region: cdn-2.runonflux.io (107.175.82.227) was removed on
+          # 2026-07-29 after the server was shut down for non-payment and the
+          # provider re-leased its IP to another tenant. US clients now resolve
+          # to whichever of the remaining nodes pickclosest favours. Restoring a
+          # US region means adding it back here with a new address - do not
+          # reuse the old one.
           geo_regions:
             - name: "eu-central"
               description: "Germany EU"
               server: "cdn-1.runonflux.io"
-              ip: "89.58.31.71"
-            - name: "us-west"
-              description: "West Coast USA"
-              server: "cdn-2.runonflux.io"
-              ip: "107.175.82.227"
+              ip: "159.195.85.44"
             - name: "as-east"
               description: "Hong Kong Asia"
               server: "cdn-3.runonflux.io"
@@ -39,9 +78,9 @@ powerdns:
     master_ips: ["5.39.57.39"]
     slave_ips: ["5.161.41.40"]
     # TSIG key for zone transfers (generate with: openssl rand -base64 48)
-    tsig_zone_transfer_key: "REPLACE_WITH_STAGING_ZONE_TRANSFER_KEY"
+    tsig_zone_transfer_key: "{{ tsig_staging_zone_transfer_key | default('REPLACE_WITH_STAGING_ZONE_TRANSFER_KEY') }}"
     # API key for certbot (generate with: openssl rand -base64 32)
-    api_key: "REPLACE_WITH_STAGING_API_KEY"
+    api_key: "{{ pdns_api_staging_key | default('REPLACE_WITH_STAGING_API_KEY') }}"
 
   production:
     zone_configs:
@@ -51,15 +90,17 @@ powerdns:
           default_ttl: "300"
           geo_routing: true
           lua_routing: false
+          # No us-west region: cdn-2.runonflux.io (107.175.82.227) was removed on
+          # 2026-07-29 after the server was shut down for non-payment and the
+          # provider re-leased its IP to another tenant. US clients now resolve
+          # to whichever of the remaining nodes pickclosest favours. Restoring a
+          # US region means adding it back here with a new address - do not
+          # reuse the old one.
           geo_regions:
             - name: "eu-central"
               description: "Germany EU"
               server: "cdn-1.runonflux.io"
-              ip: "89.58.31.71"
-            - name: "us-west"
-              description: "West Coast USA"
-              server: "cdn-2.runonflux.io"
-              ip: "107.175.82.227"
+              ip: "159.195.85.44"
             - name: "as-east"
               description: "Hong Kong Asia"
               server: "cdn-3.runonflux.io"
@@ -73,16 +114,20 @@ powerdns:
           routing_script: "app_routing.lua"
           routing_function: "appRouteCname"
           debug_function: "appRouteDebug"
-    soa_nameserver: "pdns1.runonflux.io."
+    # The name the parent zone delegates to, and the only one of ours that
+    # resolves. pdns1.runonflux.io has no records of any type, so a resolver that
+    # took the zone's own NS set — which outranks the delegation under RFC 2181
+    # §5.4.1 — would be left with no reachable nameserver for the zone.
+    soa_nameserver: "pdns.runonflux.io."
     soa_email: "hostmaster.runonflux.io."
-    nameservers: ["pdns1.runonflux.io."]
+    nameservers: ["pdns.runonflux.io."]
     master_ips: ["5.39.57.38"]
     slave_ips: ["5.161.203.77", "178.128.30.247"]
     # TSIG key for zone transfers (generate with: openssl rand -base64 48)
-    tsig_zone_transfer_key: "REPLACE_WITH_PRODUCTION_ZONE_TRANSFER_KEY"
+    tsig_zone_transfer_key: "{{ tsig_production_zone_transfer_key | default('REPLACE_WITH_PRODUCTION_ZONE_TRANSFER_KEY') }}"
     # API key for certbot (generate with: openssl rand -base64 32)
-    api_key: "REPLACE_WITH_PRODUCTION_API_KEY"
+    api_key: "{{ pdns_api_production_key | default('REPLACE_WITH_PRODUCTION_API_KEY') }}"
 
 maxmind:
-  account_id: "YOUR_ACCOUNT_ID"
-  license_key: "YOUR_LICENSE_KEY"
+  account_id: "{{ maxmind_account_id | default('YOUR_ACCOUNT_ID') }}"
+  license_key: "{{ maxmind_license_key | default('YOUR_LICENSE_KEY') }}"

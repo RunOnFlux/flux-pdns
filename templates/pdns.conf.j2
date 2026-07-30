@@ -18,6 +18,11 @@ geoip-database-files=mmdb:/usr/share/GeoIP/GeoLite2-City.mmdb;mode=mmap;language
 # EDNS Client Subnet for better geo-location accuracy
 edns-subnet-processing=yes
 
+# Disable consistent-backends for location-based records
+# When enabled, PowerDNS uses ANY queries which cannot be cached correctly
+# for geo-routing responses with non-zero ECS scope
+consistent-backends=no
+
 # Performance and caching settings
 cache-ttl=60
 negquery-cache-ttl=60
@@ -34,7 +39,7 @@ log-dns-details=yes
 {% if server_role == 'master' %}
 # Security settings - Enable API for certbot
 webserver=yes
-webserver-address={{ hostvars[inventory_hostname]['health_check_bind_address'] | default(ansible_host) }}
+webserver-address={{ ansible_host }}
 webserver-port=8081
 webserver-allow-from=127.0.0.1,{{ powerdns.cert_server_ip }}
 api=yes
@@ -81,6 +86,22 @@ allow-axfr-ips=127.0.0.1
 # Notify slaves when zones change
 {% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
 also-notify={{ powerdns[env].slave_ips | join(',') }}
+
+# How often the primary scans its own SOA serials to notice there is anything to
+# notify about. also-notify above only says WHERE a notification goes; this says
+# how quickly one is sent at all, and unset it defaults to 60s.
+#
+# That delay is client-visible, because the parent delegates geographically and
+# US and APAC clients are served by the secondaries. Until a transfer lands, a
+# name that already exists on the primary is answered by those secondaries from
+# the zone wildcard — a CNAME to a proxy, at the zone's hour-long TTL. Measured
+# at 45s on the default; a write followed by an explicit API notify converges in
+# under 4.
+#
+# The cost is a per-zone serial scan every 10s on the primary, which scales with
+# zone count and is negligible here. Secondaries do not poll more often as a
+# result; their REFRESH governs that.
+xfr-cycle-interval=10
 
 # Enable DNS updates for ACME challenges
 dnsupdate=yes

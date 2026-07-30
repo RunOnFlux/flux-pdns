@@ -35,6 +35,7 @@ Use the PowerDNS API to create or update a TXT record on the primary server:
 
 ```bash
 curl -v -X PATCH \
+  --interface 127.0.0.1 \
   -H "X-API-Key: $PDNS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -49,7 +50,7 @@ curl -v -X PATCH \
       "ttl": 300
     }]
   }' \
-  'http://localhost:8081/api/v1/servers/localhost/zones/cdn-geodev.runonflux.io.'
+  'http://10.100.0.154:8081/api/v1/servers/localhost/zones/cdn-geodev.runonflux.io.'
 ```
 
 ### 1b. Delete a DNS Record on Primary
@@ -58,6 +59,7 @@ To remove the TXT record created above:
 
 ```bash
 curl -v -X PATCH \
+  --interface 127.0.0.1 \
   -H "X-API-Key: $PDNS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -67,7 +69,7 @@ curl -v -X PATCH \
       "changetype": "DELETE"
     }]
   }' \
-  'http://localhost:8081/api/v1/servers/localhost/zones/cdn-geodev.runonflux.io.'
+  'http://10.100.0.154:8081/api/v1/servers/localhost/zones/cdn-geodev.runonflux.io.'
 ```
 
 ### 2. Watch the Journal on Secondary

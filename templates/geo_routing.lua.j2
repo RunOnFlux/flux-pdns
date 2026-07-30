@@ -33,18 +33,54 @@ function getAllServerIPs()
 end
 
 
+-- Health check settings, shared by every routing function below.
+--
+-- ifurlup() rather than ifportup(): a port check only establishes that
+-- something is listening on 443. When cdn-2 was shut down for non-payment, its
+-- provider re-leased the IP to a tenant who also ran nginx there, so the port
+-- check passed and US traffic kept being routed to a stranger's server. Fetching
+-- a page we serve and matching a token in it asks the question that matters -
+-- is this still our node - instead of merely whether a socket is open.
+--
+-- Note the address argument differs between the two: ifportup() takes a flat
+-- list, ifurlup() takes a list of address SETS and uses the first set with an
+-- available member. All candidates go in one set here, so the selector chooses
+-- among every healthy node exactly as before.
+local HEALTH_URL = "{{ powerdns.geo_health_check.url }}"
+local HEALTH_OPTS = {
+    stringmatch = "{{ powerdns.geo_health_check.stringmatch }}",
+    -- Higher than the old port check: that timed a TCP connect, this must also
+    -- complete a TLS handshake and an HTTP GET, and EU->Hong Kong runs about
+    -- three round trips. minimumFailures below absorbs the occasional overrun.
+    timeout = 3,
+    minimumFailures = 3,         -- 3 consecutive failures before marking as down
+    interval = 15                -- Check every 15 seconds
+}
+
+-- Build the option table for a given selector without mutating the shared one.
+local function healthOpts(selector, backupSelector)
+    local opts = {}
+    for k, v in pairs(HEALTH_OPTS) do
+        opts[k] = v
+    end
+    opts.selector = selector
+    if backupSelector then
+        opts.backupSelector = backupSelector
+    end
+    return opts
+end
+
+
 -- Main geo-routing function called by PowerDNS
 function geoRoute()
     local all_ips = getAllServerIPs()
 
-    -- Health check with working parameters
-    local available_ips = ifportup(443, all_ips, {
-        timeout = 2,                 -- 2 seconds connection timeout
-        minimumFailures = 3,         -- 3 consecutive failures before marking as down
-        interval = 15,               -- Check every 15 seconds
-        selector = 'pickclosest',    -- Use geographic selection for healthy servers
-        backupSelector = 'pickclosest' -- Use geographic selection even when all appear down
-    })
+    -- pickclosest as backupSelector too, so that if every node fails the check
+    -- we still answer with the geographically nearest rather than at random.
+    -- ifurlup falls back to backupSelector instead of returning nothing, so a
+    -- broken health check degrades routing quality without taking the zone out.
+    local available_ips = ifurlup(HEALTH_URL, {all_ips},
+                                  healthOpts('pickclosest', 'pickclosest'))
 
     return available_ips
 end
@@ -54,13 +90,8 @@ end
 function geoRouteWeighted()
     local all_ips = getAllServerIPs()
 
-    -- Health check with same parameters as above
-    local available_ips = ifportup(443, all_ips, {
-        timeout = 2,
-        minimumFailures = 3,
-        interval = 15,
-        selector = 'all'       -- Return ALL healthy servers, not just one
-    })
+    -- selector 'all' returns every healthy server, not just one
+    local available_ips = ifurlup(HEALTH_URL, {all_ips}, healthOpts('all'))
 
     -- Return weighted selection based on geographic distribution
     return pickwrandom(available_ips)
@@ -79,12 +110,7 @@ end
 -- Function to get server status (for monitoring/debugging)
 function getServerStatus()
     local all_ips = getAllServerIPs()
-    local available_ips = ifportup(443, all_ips, {
-        timeout = 2,
-        minimumFailures = 3,
-        interval = 15,
-        selector = 'all'
-    })
+    local available_ips = ifurlup(HEALTH_URL, {all_ips}, healthOpts('all'))
 
     local status_parts = {}
     local up_count = 0
