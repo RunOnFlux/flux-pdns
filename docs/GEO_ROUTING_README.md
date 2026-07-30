@@ -9,22 +9,44 @@ The geo-routing system provides:
 - Automatic health checking of CDN servers every 15 seconds
 - Failover to the next closest server when a server goes down
 - 5-minute recovery period when servers come back online
-- Support for three global CDN locations
 
 ## CDN Servers
 
+`vars.yaml` is authoritative for this list. The table below is a convenience
+copy and can go stale; check `powerdns[env].zone_configs[].template_vars.geo_regions`
+before trusting it.
+
 | Server | IP Address | Location | Hostname |
 |--------|------------|----------|----------|
-| CDN-1 | 89.58.31.71 | Germany, EU | cdn-1.runonflux.io |
-| CDN-2 | 107.175.82.227 | West Coast USA | cdn-2.runonflux.io |
+| CDN-1 | 159.195.85.44 | Germany, EU | cdn-1.runonflux.io |
 | CDN-3 | 180.188.197.165 | Hong Kong, Asia | cdn-3.runonflux.io |
+
+### Decommissioned — do not use these addresses
+
+Both were re-leased by their providers to unrelated customers. They are not ours,
+and anything still pointing at them is pointing at a stranger's server.
+
+| Was | Address | Note |
+|-----|---------|------|
+| cdn-2.runonflux.io | `107.175.82.227` | shut down for non-payment 2026-07; the IP now answers on 443 with someone else's nginx, which is what let `ifportup` keep reporting it healthy through the outage |
+| cdn-1.runonflux.io (old) | `89.58.31.71` | cdn-1 moved to `159.195.85.44` on 2025-12-27 |
+
+There is currently **no US region**. US clients resolve to whichever remaining
+node `pickclosest` favours. Restoring US coverage means adding a region to
+`vars.yaml` with a **new** address — never either of the two above.
 
 ## Architecture
 
 The implementation uses PowerDNS with SQLite3 and GeoIP backends with Lua Records to provide:
 
 1. **Backend**: SQLite3 (`gsqlite3`) for zone storage + GeoIP (`geoip`) for geographic data
-2. **Health Checking**: The `ifportup()` function checks port 443 (HTTPS) on each CDN server
+2. **Health Checking**: The `ifurlup()` function fetches `https://cdn.runonflux.io/health`
+   against each candidate address and requires the response to contain a token we
+   serve (`geo_health_check.stringmatch` in `vars.yaml`). This replaced
+   `ifportup(443, ...)`, which proved only that *something* accepted TCP on 443 —
+   when cdn-2's address was re-leased to a tenant also running nginx, the check
+   kept reporting it healthy and US traffic was routed to a stranger's server.
+   The check now answers "is this still our node", not "is a socket open"
 3. **Geographic Routing**: The `pickclosest()` function uses MaxMind GeoIP databases to select the geographically nearest healthy server
 4. **Failover Logic**: Automatic failover after 3 failed health checks (45 seconds total)
 5. **Recovery Tracking**: 5-minute delay before re-adding recovered servers to the pool
@@ -143,10 +165,17 @@ Real-time monitoring of CDN server health:
 
 To test failover behavior:
 
-1. **Block a CDN server** (simulate failure):
+1. **Block a CDN server** (simulate failure) — use an address from
+   `geo_regions` in `vars.yaml`, not one pasted from here:
    ```bash
-   sudo iptables -A OUTPUT -d 107.175.82.227 -j DROP
+   sudo iptables -A OUTPUT -d 180.188.197.165 -j DROP
    ```
+
+   Note this only exercises the *unreachable* case. It does not reproduce the
+   failure that caused the 2026-07 outage, where the node answered normally but
+   was no longer ours. For that, point the check at a host serving different
+   content and confirm `ifurlup` marks it down — a live node cannot be made to
+   serve the wrong body, so that case belongs in the docker harness.
 
 2. **Wait 6 seconds** for detection (3 failed checks)
 
@@ -158,7 +187,7 @@ To test failover behavior:
 
 4. **Restore access**:
    ```bash
-   sudo iptables -D OUTPUT -d 107.175.82.227 -j DROP
+   sudo iptables -D OUTPUT -d 180.188.197.165 -j DROP
    ```
 
 5. **Wait 5 minutes** for recovery period
@@ -180,7 +209,6 @@ Returns the IP of the geographically closest healthy CDN server.
 ### Direct Server Queries (for testing)
 ```bash
 dig cdn-1.runonflux.io A   # Germany, EU
-dig cdn-2.runonflux.io A   # West Coast USA
 dig cdn-3.runonflux.io A   # Hong Kong, Asia
 ```
 

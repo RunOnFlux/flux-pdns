@@ -5,7 +5,7 @@ This guide provides step-by-step instructions for deploying the complete DNS-01 
 
 ## Prerequisites
 - Access to PowerDNS servers (dev: 2 servers, prod: 3 servers)
-- Access to CDN nodes (cdn-1, cdn-2, cdn-3)
+- Access to CDN nodes (cdn-1, cdn-3 — cdn-2 was decommissioned in 2026-07)
 - Ubuntu certificate server (can be small VPS)
 - Discord webhook URL for notifications
 - SSH access to all servers

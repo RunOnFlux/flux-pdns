@@ -3,24 +3,40 @@
 ## Overview
 This document outlines the complete architecture and implementation plan for setting up Let's Encrypt certificates using DNS-01 challenge validation with PowerDNS master/slave replication and automated certificate distribution to CDN nodes.
 
+> **This section described the state before the master/slave work below was
+> carried out.** It is kept for context; for what is actually deployed see
+> `hosts.yaml` and `vars.yaml`, which are authoritative. Corrected on 2026-07-30,
+> because the `pdns1` reference below was being read as current and is not.
+
 ## Current Infrastructure
 
 ### PowerDNS Servers
-**Development Environment:**
-- 2 PowerDNS servers (geographically distributed)
-- Load balanced behind `pdns2.runonflux.io`
-- Currently no replication between servers
 
-**Production Environment:**
-- 3 PowerDNS servers (geographically distributed)
-- Load balanced behind `pdns1.runonflux.io`
-- Currently no replication between servers
+Replication is implemented — each environment has one primary and the rest are
+secondaries, per `pdns_role` in `hosts.yaml`.
+
+**Staging (`app2` group):**
+- 2 PowerDNS servers, primary `pdns-staging-fn1`
+- Delegated to `pdns2.runonflux.io`
+
+**Production (`app` group):**
+- 3 PowerDNS servers, primary `pdns-prod-fn1`
+- Delegated to **`pdns.runonflux.io`**
+
+> `pdns1.runonflux.io` has **no records of any type** and never resolved. It was
+> named here, and consequently ended up in the production zone's NS set and SOA
+> MNAME, where it sat until 2026-07-29. A resolver taking the zone's own NS set —
+> which outranks the delegation under RFC 2181 §5.4.1 — would have been left with
+> no reachable nameserver. Do not reintroduce it.
 
 ### CDN Infrastructure
 - **cdn-1.runonflux.io** (Germany, EU)
-- **cdn-2.runonflux.io** (West Coast USA)
 - **cdn-3.runonflux.io** (Hong Kong, Asia)
 - All serve content via nginx with existing certbot certificates
+
+`cdn-2.runonflux.io` (West Coast USA) was decommissioned in 2026-07 and its
+address re-leased to another customer. There is no US region at present. See
+`GEO_ROUTING_README.md` for the addresses that must never be reused.
 
 ### Target Domains
 - **Development**: `cdn-geodev.runonflux.io`
@@ -82,9 +98,11 @@ Certificate Server -> Europe Master -> US/Asia Slaves
 
 #### Certificate Distribution
 1. Validate certificate before distribution
-2. Distribute to all CDN nodes via SSH:
+2. Distribute to all CDN nodes via SSH (the list lives in `cdn_nodes` on the
+   cert server and is authoritative — a node removed from the fleet must be
+   removed there before the next run, or its `ssh-keyscan` will record whoever
+   holds the address now):
    - cdn-1.runonflux.io (EU)
-   - cdn-2.runonflux.io (US)
    - cdn-3.runonflux.io (Asia)
 3. Update nginx configurations
 4. Graceful nginx reload
