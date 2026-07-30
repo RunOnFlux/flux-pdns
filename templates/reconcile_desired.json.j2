@@ -22,6 +22,7 @@
 {%   set tv = zone.template_vars %}
 {%   set health = [] %}
 {%   set lua = [] %}
+{%   set srv = [] %}
 {%   if tv.geo_routing | default(false) %}
 {%     set _ = lua.append({
          'name': '_config.' ~ zone.domain ~ '.',
@@ -33,6 +34,16 @@
 {%       set _ = health.append({
            'region': region.name,
            'content': region.description ~ ' - ' ~ region.server ~ ' - ' ~ region.ip}) %}
+{#       The same regions, published as the directly-reachable node list. All
+         equal priority and weight: this is a fallback set for when the
+         geo-routed name is unusable, so there is no ordering to express - the
+         client picks. region.server already holds the per-node hostname, which
+         is what an SRV target must be. #}
+{%       set _ = srv.append({
+           'server': region.server,
+           'priority': 0,
+           'weight': 5,
+           'port': 443}) %}
 {%     endfor %}
 {%     if tv.status_endpoint | default(false) %}
 {%       set _ = lua.append({
@@ -58,10 +69,12 @@
 {%   set _ = desired.update({zone.domain ~ '.': {
        'apex_ttl': tv.default_ttl | default('3600') | int,
        'health_ttl': 300,
+       'srv_ttl': tv.default_ttl | default('3600') | int,
        'nameservers': powerdns[env].nameservers,
        'soa_mname': powerdns[env].soa_nameserver,
        'soa_rname': powerdns[env].soa_email,
        'health_records': health,
+       'srv_targets': srv,
        'lua_records': lua}}) %}
 {% endfor %}
 {{ desired | to_nice_json }}

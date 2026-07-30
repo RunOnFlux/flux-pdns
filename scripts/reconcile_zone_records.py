@@ -20,6 +20,7 @@ So this reconciles individual records instead, and owns an enumerated set:
   written    apex NS
              apex SOA MNAME and RNAME  (never the serial)
              _health.<region> TXT
+             _cdn._tcp SRV  (the directly-reachable node list)
 
   detected   LUA records - compared and reported, never written
 
@@ -189,6 +190,45 @@ def compute_changes(zone: str, existing: dict, desired: dict) -> list:
         if name in want_health:
             continue
         patch.append({"name": name, "type": "TXT", "changetype": "DELETE"})
+
+    # --- _cdn._tcp SRV: the directly-reachable node list ----------------------
+    # Clients fall back to individual nodes when the geo-routed name is unusable,
+    # so that list cannot be discovered through the CDN itself - it would be
+    # circular. It lives in DNS instead, which is a different failure domain from
+    # HTTP and one the client already depends on: the per-node names it uses today
+    # are themselves hostnames, so publishing the *set* here adds no new
+    # dependency. If geo routing hands out a bad answer, this plain non-geo lookup
+    # against the same authoritative servers still resolves.
+    #
+    # SRV rather than several A records at a well-known name, because A returns
+    # bare addresses and connecting by IP defeats TLS verification - which is the
+    # thing that would have caught cdn-2's address being re-leased. An SRV target
+    # is a hostname, so the client resolves it and verifies the certificate
+    # normally.
+    #
+    # One rrset per zone holding every target, so a changed set is a single
+    # REPLACE and an emptied one is a single DELETE.
+    srv_name = canonical("_cdn._tcp.{}".format(zone))
+    srv_ttl = int(desired.get("srv_ttl", apex_ttl))
+    want_srv = sorted(
+        "{} {} {} {}".format(
+            target.get("priority", 0),
+            target.get("weight", 5),
+            target.get("port", 443),
+            canonical(target["server"]),
+        )
+        for target in desired.get("srv_targets", [])
+    )
+    srv_rrset = existing.get((srv_name, "SRV"))
+    have_srv = sorted(r["content"] for r in srv_rrset["records"]) if srv_rrset else []
+
+    if want_srv:
+        if have_srv != want_srv or (srv_rrset is not None and srv_rrset["ttl"] != srv_ttl):
+            patch.append(_replace(srv_name, "SRV", srv_ttl, want_srv))
+    elif srv_rrset is not None:
+        # No targets configured - the zone should not advertise a node list at
+        # all. Scoped to this one name, so nothing else can be caught by it.
+        patch.append({"name": srv_name, "type": "SRV", "changetype": "DELETE"})
 
     return patch
 

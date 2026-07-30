@@ -73,6 +73,15 @@ def geo_zone_data():
                 ],
             },
             {
+                "name": "_cdn._tcp." + GEO_ZONE,
+                "type": "SRV",
+                "ttl": 300,
+                "records": [
+                    {"content": "0 5 443 cdn-1.runonflux.io.", "disabled": False},
+                    {"content": "0 5 443 cdn-3.runonflux.io.", "disabled": False},
+                ],
+            },
+            {
                 "name": "_config." + GEO_ZONE,
                 "type": "LUA",
                 "ttl": 300,
@@ -102,6 +111,11 @@ def geo_desired():
     return {
         "apex_ttl": 300,
         "health_ttl": 300,
+        "srv_ttl": 300,
+        "srv_targets": [
+            {"server": "cdn-1.runonflux.io", "priority": 0, "weight": 5, "port": 443},
+            {"server": "cdn-3.runonflux.io", "priority": 0, "weight": 5, "port": 443},
+        ],
         "nameservers": ["pdns.runonflux.io."],
         "soa_mname": "pdns.runonflux.io.",
         "soa_rname": "hostmaster.runonflux.io.",
@@ -492,6 +506,157 @@ def test_undotted_vars_still_compare_equal():
     desired["soa_mname"] = "pdns.runonflux.io"
     desired["nameservers"] = ["pdns.runonflux.io"]
     assert compute_changes(GEO_ZONE, index_rrsets(geo_zone_data()), desired) == []
+
+
+# --------------------------------------------------------------------------
+# _cdn._tcp SRV - the directly-reachable node list
+# --------------------------------------------------------------------------
+
+
+def test_srv_matching_vars_produces_no_change():
+    assert compute_changes(GEO_ZONE, index_rrsets(geo_zone_data()), geo_desired()) == []
+
+
+def test_retired_node_is_dropped_from_the_srv_set():
+    """The property that makes a client release unnecessary to retire a node."""
+    zone = geo_zone_data()
+    for rrset in zone["rrsets"]:
+        if rrset["type"] == "SRV":
+            rrset["records"].append(
+                {"content": "0 5 443 cdn-2.runonflux.io.", "disabled": False}
+            )
+
+    patch = compute_changes(GEO_ZONE, index_rrsets(zone), geo_desired())
+
+    assert len(patch) == 1
+    assert patch[0]["type"] == "SRV"
+    assert patch[0]["changetype"] == "REPLACE"
+    contents = [r["content"] for r in patch[0]["records"]]
+    assert contents == ["0 5 443 cdn-1.runonflux.io.", "0 5 443 cdn-3.runonflux.io."]
+    assert not any("cdn-2" in c for c in contents)
+
+
+def test_missing_srv_rrset_is_created():
+    zone = geo_zone_data()
+    zone["rrsets"] = [r for r in zone["rrsets"] if r["type"] != "SRV"]
+    patch = compute_changes(GEO_ZONE, index_rrsets(zone), geo_desired())
+    assert len(patch) == 1
+    assert patch[0]["name"] == "_cdn._tcp." + GEO_ZONE
+    assert patch[0]["ttl"] == 300
+
+
+def test_srv_removed_entirely_when_no_targets():
+    desired = geo_desired()
+    desired["srv_targets"] = []
+    patch = compute_changes(GEO_ZONE, index_rrsets(geo_zone_data()), desired)
+    assert patch == [
+        {"name": "_cdn._tcp." + GEO_ZONE, "type": "SRV", "changetype": "DELETE"}
+    ]
+
+
+def test_srv_target_without_trailing_dot_still_compares_equal():
+    """vars.yaml holds bare hostnames; the API canonicalises. A mismatch here
+    would rewrite the rrset on every single run."""
+    desired = geo_desired()
+    for target in desired["srv_targets"]:
+        assert not target["server"].endswith(".")
+    assert compute_changes(GEO_ZONE, index_rrsets(geo_zone_data()), desired) == []
+
+
+def test_srv_target_order_in_vars_does_not_matter():
+    desired = geo_desired()
+    desired["srv_targets"].reverse()
+    assert compute_changes(GEO_ZONE, index_rrsets(geo_zone_data()), desired) == []
+
+
+def test_srv_record_order_from_the_api_does_not_matter():
+    """PowerDNS does not promise an order for the records within an rrset.
+
+    Comparing them unsorted would rewrite the rrset on every run - and every
+    fixture here happens to be pre-sorted, so nothing else would notice.
+    """
+    zone = geo_zone_data()
+    for rrset in zone["rrsets"]:
+        if rrset["type"] == "SRV":
+            rrset["records"].reverse()
+    assert compute_changes(GEO_ZONE, index_rrsets(zone), geo_desired()) == []
+
+
+def test_ns_record_order_from_the_api_does_not_matter():
+    """Same property for the apex NS set, which is compared the same way.
+
+    Note "pdns-b." sorts before "pdns." ('-' is 0x2D, '.' is 0x2E), so the
+    records below are deliberately in unsorted order - listing them the other way
+    round would be pre-sorted and would prove nothing.
+    """
+    zone = geo_zone_data()
+    desired = geo_desired()
+    desired["nameservers"] = ["pdns.runonflux.io.", "pdns-b.runonflux.io."]
+    for rrset in zone["rrsets"]:
+        if rrset["type"] == "NS":
+            rrset["records"] = [
+                {"content": "pdns.runonflux.io.", "disabled": False},
+                {"content": "pdns-b.runonflux.io.", "disabled": False},
+            ]
+    assert compute_changes(GEO_ZONE, index_rrsets(zone), desired) == []
+
+
+def test_srv_deletion_cannot_reach_another_name():
+    """The DELETE branch is bound to the single _cdn._tcp name for this zone."""
+    zone = geo_zone_data()
+    zone["rrsets"].append(
+        {
+            "name": "_sip._tcp." + GEO_ZONE,
+            "type": "SRV",
+            "ttl": 300,
+            "records": [{"content": "0 5 5060 pbx.example.com.", "disabled": False}],
+        }
+    )
+    desired = geo_desired()
+    desired["srv_targets"] = []
+    patch = compute_changes(GEO_ZONE, index_rrsets(zone), desired)
+    assert [(r["name"], r["type"]) for r in patch] == [
+        ("_cdn._tcp." + GEO_ZONE, "SRV")
+    ]
+
+
+def test_app_zone_gets_no_srv():
+    """Only geo zones have regions, so only they advertise a node list."""
+    zone = {
+        "name": APP_ZONE,
+        "rrsets": [
+            {
+                "name": APP_ZONE,
+                "type": "SOA",
+                "ttl": 3600,
+                "records": [
+                    {
+                        "content": (
+                            "pdns.runonflux.io. hostmaster.runonflux.io. "
+                            "2026073722 3600 600 86400 3600"
+                        ),
+                        "disabled": False,
+                    }
+                ],
+            },
+            {
+                "name": APP_ZONE,
+                "type": "NS",
+                "ttl": 3600,
+                "records": [{"content": "pdns.runonflux.io.", "disabled": False}],
+            },
+        ],
+    }
+    desired = {
+        "apex_ttl": 3600,
+        "nameservers": ["pdns.runonflux.io."],
+        "soa_mname": "pdns.runonflux.io.",
+        "soa_rname": "hostmaster.runonflux.io.",
+        "health_records": [],
+        "srv_targets": [],
+        "lua_records": [],
+    }
+    assert compute_changes(APP_ZONE, index_rrsets(zone), desired) == []
 
 
 # --------------------------------------------------------------------------

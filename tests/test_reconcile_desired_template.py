@@ -147,12 +147,43 @@ def test_ttls_follow_the_zone_template():
     assert production["app.runonflux.io."]["apex_ttl"] == 3600
 
 
+def test_first_deploy_creates_only_the_srv_rrset():
+    """cdn-geo as captured on 2026-07-30, before SRV records existed.
+
+    Publishing them is the one change the next production run should make. If
+    this ever grows a second entry, something else has drifted and wants looking
+    at before deploying.
+    """
+    zone_name = "cdn-geo.runonflux.io."
+    patch = compute_changes(
+        zone_name,
+        index_rrsets(_captured_production_zone(with_srv=False)),
+        render("production")[zone_name],
+    )
+    assert len(patch) == 1
+    assert patch[0]["name"] == "_cdn._tcp." + zone_name
+    assert patch[0]["type"] == "SRV"
+    assert sorted(r["content"] for r in patch[0]["records"]) == [
+        "0 5 443 cdn-1.runonflux.io.",
+        "0 5 443 cdn-3.runonflux.io.",
+    ]
+
+
 def test_round_trip_against_production_zone_is_a_no_op():
     """The end-to-end property: template and script agree on a live zone.
 
-    This zone was captured from the production API. Reconciling it against the
-    rendered desired state must propose nothing.
+    The steady state once SRV is published - reconciling must propose nothing.
     """
+    zone_name = "cdn-geo.runonflux.io."
+    desired = render("production")[zone_name]
+    assert compute_changes(
+        zone_name, index_rrsets(_captured_production_zone(with_srv=True)), desired
+    ) == []
+
+
+def _captured_production_zone(with_srv):
+    """cdn-geo as the production API returns it, optionally including the SRV
+    rrset this change introduces."""
     zone_name = "cdn-geo.runonflux.io."
     captured = {
         "rrsets": [
@@ -200,5 +231,16 @@ def test_round_trip_against_production_zone_is_a_no_op():
             },
         ]
     }
-    desired = render("production")[zone_name]
-    assert compute_changes(zone_name, index_rrsets(captured), desired) == []
+    if with_srv:
+        captured["rrsets"].append(
+            {
+                "name": "_cdn._tcp." + zone_name,
+                "type": "SRV",
+                "ttl": 300,
+                "records": [
+                    {"content": "0 5 443 cdn-1.runonflux.io.", "disabled": False},
+                    {"content": "0 5 443 cdn-3.runonflux.io.", "disabled": False},
+                ],
+            }
+        )
+    return captured
