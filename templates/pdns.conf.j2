@@ -41,7 +41,20 @@ log-dns-details=yes
 webserver=yes
 webserver-address={{ ansible_host }}
 webserver-port=8081
-webserver-allow-from=127.0.0.1,{{ powerdns.cert_server_ip }}
+# {{ ansible_host }} is the primary's own address, and it is here so the primary
+# can call its own API - the zone record reconcile in powerdns_setup.yaml runs on
+# the box and talks to the URL below. The webserver binds to {{ ansible_host }}
+# rather than loopback (the cert server needs to reach it), so a connection made
+# locally is stamped with that source address and was refused by this ACL:
+#
+#   Webserver closing socket: remote ({{ ansible_host }}) does not match the set ACL
+#
+# It grants nothing new. Traffic to a local address is routed over loopback,
+# which ufw accepts via its built-in "-i lo" rule; a packet claiming this source
+# from outside arrives on a real interface and hits the default deny, and TCP
+# needs a completed handshake regardless. The only party this admits is root on
+# a host that already owns pdns.sqlite3 outright.
+webserver-allow-from=127.0.0.1,{{ ansible_host }},{{ powerdns.cert_server_ip }}
 api=yes
 api-key={{ powerdns[env].api_key }}
 {% else %}

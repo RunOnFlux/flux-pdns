@@ -1,0 +1,80 @@
+{#
+  Desired state for the template-owned records of every zone, consumed by
+  scripts/reconcile_zone_records.py. Keyed by canonical (trailing dot) zone name.
+
+  This mirrors zone.template.j2. The two must agree, because that template is
+  what writes a zone at creation and this is what holds it there afterwards - if
+  they disagree, a freshly created zone reports drift on its very first run.
+
+  Note health_ttl is carried separately rather than derived from default_ttl:
+  zone.template.j2 hardcodes 300 on the _health records while the apex records
+  take the zone default.
+
+  The lua_records entries are compared and never written. Their content strings
+  must match what the API returns byte for byte, including the record type
+  prefix and the inner quoting, or the reconcile fails the play on a zone that
+  is in fact correct. tests/test_reconcile_desired_template.py renders this file
+  and asserts exactly that against captured production output.
+#}
+{% set env = 'staging' if DEPLOY_ENV == 'staging' else 'production' %}
+{% set desired = {} %}
+{% for zone in powerdns[env].zone_configs %}
+{%   set tv = zone.template_vars %}
+{%   set health = [] %}
+{%   set lua = [] %}
+{%   set srv = [] %}
+{%   if tv.geo_routing | default(false) %}
+{%     set _ = lua.append({
+         'name': '_config.' ~ zone.domain ~ '.',
+         'content': 'LUA "dofile(\'/opt/pdns/scripts/geo_routing.lua\')"'}) %}
+{%     set _ = lua.append({
+         'name': zone.domain ~ '.',
+         'content': 'A ";include(\'_config\'); return geoRoute()"'}) %}
+{%     for region in tv.geo_regions | default([]) %}
+{%       set _ = health.append({
+           'region': region.name,
+           'content': region.description ~ ' - ' ~ region.server ~ ' - ' ~ region.ip}) %}
+{#       The same regions, published as the directly-reachable node list. All
+         equal priority and weight: this is a fallback set for when the
+         geo-routed name is unusable, so there is no ordering to express - the
+         client picks. region.server already holds the per-node hostname, which
+         is what an SRV target must be. #}
+{%       set _ = srv.append({
+           'server': region.server,
+           'priority': 0,
+           'weight': 5,
+           'port': 443}) %}
+{%     endfor %}
+{%     if tv.status_endpoint | default(false) %}
+{%       set _ = lua.append({
+           'name': '_status.' ~ zone.domain ~ '.',
+           'content': 'TXT ";include(\'_config\'); return getServerStatus()"'}) %}
+{%     endif %}
+{%   endif %}
+{%   if tv.lua_routing | default(false) %}
+{%     set _ = lua.append({
+         'name': '_config.' ~ zone.domain ~ '.',
+         'content': 'LUA "dofile(\'/opt/pdns/scripts/' ~ tv.routing_script | default('app_routing.lua') ~ '\')"'}) %}
+{%     if tv.routing_function is defined %}
+{%       set _ = lua.append({
+           'name': '*.' ~ zone.domain ~ '.',
+           'content': 'CNAME ";include(\'_config\'); return ' ~ tv.routing_function ~ '(qname)"'}) %}
+{%     endif %}
+{%     if tv.debug_function is defined %}
+{%       set _ = lua.append({
+           'name': '_debug.' ~ zone.domain ~ '.',
+           'content': 'TXT ";include(\'_config\'); return ' ~ tv.debug_function ~ '(qname)"'}) %}
+{%     endif %}
+{%   endif %}
+{%   set _ = desired.update({zone.domain ~ '.': {
+       'apex_ttl': tv.default_ttl | default('3600') | int,
+       'health_ttl': 300,
+       'srv_ttl': tv.default_ttl | default('3600') | int,
+       'nameservers': powerdns[env].nameservers,
+       'soa_mname': powerdns[env].soa_nameserver,
+       'soa_rname': powerdns[env].soa_email,
+       'health_records': health,
+       'srv_targets': srv,
+       'lua_records': lua}}) %}
+{% endfor %}
+{{ desired | to_nice_json }}

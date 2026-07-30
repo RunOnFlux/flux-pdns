@@ -56,24 +56,41 @@
         cmd: gpg --dearmor < /tmp/powerdns-key.asc > /etc/apt/keyrings/powerdns.gpg
         creates: /etc/apt/keyrings/powerdns.gpg
 
-    - name: Remove old PowerDNS repository files
+    # Only the legacy filename, which apt_repository generated before it was
+    # given an explicit one. powerdns.list is managed declaratively below, so
+    # deleting it here only removed the file the next task then recreated - which
+    # is why both tasks reported changed on every single run, forever.
+    - name: Remove the legacy PowerDNS repository file
       ansible.builtin.file:
-        path: "{{ item }}"
+        path: /etc/apt/sources.list.d/repo_powerdns_com_ubuntu.list
         state: absent
-      loop:
-        - /etc/apt/sources.list.d/repo_powerdns_com_ubuntu.list
-        - /etc/apt/sources.list.d/powerdns.list
 
+    # Written as content rather than through apt_repository so the file holds
+    # exactly one line and nothing else. apt_repository adds a line but will not
+    # take a superseded one away, so moving auth_version - 4.9 to 5.0, say -
+    # would leave the old suite sitting in the same file, still enabled.
+    # Deleting the file first was the workaround for that, and idempotency was
+    # what it cost. Declaring the content gets both.
     - name: Add PowerDNS repository
-      ansible.builtin.apt_repository:
-        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/powerdns.gpg] http://repo.powerdns.com/ubuntu {{ ansible_distribution_release }}-auth-{{ powerdns.auth_version }} main"
-        state: present
-        filename: powerdns
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/powerdns.list
+        content: >
+          deb [arch=amd64 signed-by=/etc/apt/keyrings/powerdns.gpg]
+          http://repo.powerdns.com/ubuntu
+          {{ ansible_distribution_release }}-auth-{{ powerdns.auth_version }} main
+        owner: root
+        group: root
+        mode: "0644"
+      register: powerdns_repo
 
+    # cache_valid_time alone would skip the refresh for up to a day, so a changed
+    # repository line could be followed by an install resolved against the stale
+    # index - the pinned version would simply not be found. Force the refresh
+    # when the line actually moved, and keep the daily window otherwise.
     - name: Update apt cache
       ansible.builtin.apt:
         update_cache: yes
-        cache_valid_time: 86400
+        cache_valid_time: "{{ 0 if powerdns_repo.changed else 86400 }}"
 
     - name: Configure DNS resolution
       ansible.builtin.copy:
@@ -884,6 +901,102 @@
         day: "*"
         hour: "0"
         minute: "0"
+
+    # Zone record reconcile
+    #
+    # The zone generation and import tasks earlier in this play are gated on the
+    # zone being ABSENT from SQLite, so everything zone.template.j2 writes -
+    # _health.* TXT, apex NS, SOA MNAME - lands once, at creation, and never
+    # again. Editing vars.yaml afterwards changes nothing while the run still
+    # reports success. That gate cannot simply be dropped, because the import is
+    # `pdnsutil load-zone`, which replaces the entire zone and would take the
+    # ~170 app A records and any in-flight _acme-challenge TXT with it.
+    #
+    # These tasks reconcile the template-owned records individually instead, on
+    # every run, and leave everything else alone. They come after the service is
+    # up because they work through the HTTP API, and run only on the primary -
+    # secondaries have api=no and receive these changes by AXFR.
+    - name: Wait for the PowerDNS API to accept connections
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: 8081
+        timeout: 30
+      when: pdns_role == 'master'
+
+    - name: Install the zone record reconcile script
+      ansible.builtin.copy:
+        src: scripts/reconcile_zone_records.py
+        dest: /opt/pdns/scripts/reconcile_zone_records.py
+        owner: root
+        group: root
+        mode: "0755"
+      when: pdns_role == 'master'
+
+    - name: Render desired state for template-owned zone records
+      ansible.builtin.template:
+        src: templates/reconcile_desired.json.j2
+        dest: /run/pdns-reconcile-desired.json
+        owner: root
+        group: root
+        mode: "0600"
+      when: pdns_role == 'master'
+
+    # no_log because the API key is passed in the environment. The script itself
+    # never prints it, so the report and any error are surfaced by the two tasks
+    # below without exposing anything.
+    - name: Reconcile template-owned zone records
+      ansible.builtin.command:
+        argv: "{{ reconcile_argv + (['--dry-run'] if ansible_check_mode else []) }}"
+      vars:
+        reconcile_argv:
+          - /opt/pdns/scripts/reconcile_zone_records.py
+          - "--zone"
+          - "{{ item.domain }}"
+          - "--api-url"
+          - "http://{{ ansible_host }}:8081"
+          - "--desired"
+          - /run/pdns-reconcile-desired.json
+      environment:
+        PDNS_API_KEY: "{{ powerdns[env].api_key }}"
+      loop: "{{ powerdns[env].zone_configs }}"
+      loop_control:
+        label: "{{ item.domain }}"
+      register: reconcile_result
+      # Collected and raised below, so that every zone is attempted and the
+      # report is printed before the play stops.
+      failed_when: false
+      changed_when:
+        - reconcile_result.rc == 0
+        - (reconcile_result.stdout | from_json).changed | default(false)
+      check_mode: false
+      no_log: true
+      when: pdns_role == 'master'
+
+    - name: Report zone record reconcile
+      ansible.builtin.debug:
+        msg: "{{ item.stdout | from_json }}"
+      loop: "{{ reconcile_result.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.domain }}"
+      when:
+        - pdns_role == 'master'
+        - item.stdout | default('') != ''
+
+    # rc 2 is LUA record drift, where nothing was written and a human should
+    # look before anything is. rc 1 is an error. Neither is something to carry
+    # on past: every bug in the 2026-07-29 outage was a conditional that quietly
+    # did the wrong thing while the run reported success.
+    - name: Fail if any zone did not reconcile
+      ansible.builtin.fail:
+        msg: >-
+          Zone record reconcile failed for {{ item.item.domain }} (rc={{ item.rc }}).
+          {{ item.stdout | default('') }} {{ item.stderr | default('') }}
+      loop: "{{ reconcile_result.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.domain }}"
+      when:
+        - pdns_role == 'master'
+        - item.rc | default(0) != 0
 
     # Post-deployment verification
 
