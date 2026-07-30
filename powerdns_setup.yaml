@@ -56,24 +56,41 @@
         cmd: gpg --dearmor < /tmp/powerdns-key.asc > /etc/apt/keyrings/powerdns.gpg
         creates: /etc/apt/keyrings/powerdns.gpg
 
-    - name: Remove old PowerDNS repository files
+    # Only the legacy filename, which apt_repository generated before it was
+    # given an explicit one. powerdns.list is managed declaratively below, so
+    # deleting it here only removed the file the next task then recreated - which
+    # is why both tasks reported changed on every single run, forever.
+    - name: Remove the legacy PowerDNS repository file
       ansible.builtin.file:
-        path: "{{ item }}"
+        path: /etc/apt/sources.list.d/repo_powerdns_com_ubuntu.list
         state: absent
-      loop:
-        - /etc/apt/sources.list.d/repo_powerdns_com_ubuntu.list
-        - /etc/apt/sources.list.d/powerdns.list
 
+    # Written as content rather than through apt_repository so the file holds
+    # exactly one line and nothing else. apt_repository adds a line but will not
+    # take a superseded one away, so moving auth_version - 4.9 to 5.0, say -
+    # would leave the old suite sitting in the same file, still enabled.
+    # Deleting the file first was the workaround for that, and idempotency was
+    # what it cost. Declaring the content gets both.
     - name: Add PowerDNS repository
-      ansible.builtin.apt_repository:
-        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/powerdns.gpg] http://repo.powerdns.com/ubuntu {{ ansible_distribution_release }}-auth-{{ powerdns.auth_version }} main"
-        state: present
-        filename: powerdns
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/powerdns.list
+        content: >
+          deb [arch=amd64 signed-by=/etc/apt/keyrings/powerdns.gpg]
+          http://repo.powerdns.com/ubuntu
+          {{ ansible_distribution_release }}-auth-{{ powerdns.auth_version }} main
+        owner: root
+        group: root
+        mode: "0644"
+      register: powerdns_repo
 
+    # cache_valid_time alone would skip the refresh for up to a day, so a changed
+    # repository line could be followed by an install resolved against the stale
+    # index - the pinned version would simply not be found. Force the refresh
+    # when the line actually moved, and keep the daily window otherwise.
     - name: Update apt cache
       ansible.builtin.apt:
         update_cache: yes
-        cache_valid_time: 86400
+        cache_valid_time: "{{ 0 if powerdns_repo.changed else 86400 }}"
 
     - name: Configure DNS resolution
       ansible.builtin.copy:
