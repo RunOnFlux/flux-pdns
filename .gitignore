@@ -7,3 +7,16 @@ docker/
 
 # Generated zone files (templates are source of truth)
 zones/
+
+# PowerDNS API keys, kept in the repo root for convenience when running the
+# reconcile by hand. Nothing else stopped `git add -A` from committing these,
+# and both are live credentials for the production and staging API.
+api_key_dev
+api_key_prod
+api_key_*
+
+# Local inventory pointing at real addresses, not for publication.
+local_hosts.yaml
+
+# Ad-hoc request captures; can contain API keys in headers.
+curl_post_dns.txt

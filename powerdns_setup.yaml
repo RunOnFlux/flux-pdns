@@ -122,10 +122,24 @@
         cmd: /tmp/nodejs_setup.sh
         creates: /etc/apt/sources.list.d/nodesource.list
 
+    # state: present, not latest.
+    #
+    # With `latest` this task reports changed whenever nodesource publishes, and
+    # silently upgrades Node on every node it runs against - so the installed
+    # version across the fleet is a function of when each host was last
+    # deployed. That is the drift the deliberate PowerDNS version pin in
+    # vars.yaml exists to prevent, and having one pinned while the other floats
+    # is the inconsistency, not the pin.
+    #
+    # A full version pin (name: "nodejs={{ nodejs_version }}", keyed by distro
+    # release like powerdns_version) is the right end state, but choosing the
+    # string requires seeing what the fleet actually runs, and refusing to guess
+    # a version is this repo's own stated position. `present` stops the drift
+    # and the permanent changed report without inventing one.
     - name: Install Node.js
       apt:
         name: nodejs
-        state: latest
+        state: present
 
     # GeoIP Database Setup with MaxMind
     - name: Create GeoIP directory
