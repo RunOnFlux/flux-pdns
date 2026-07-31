@@ -13,7 +13,23 @@ The PowerDNS API allows the cert server to add, update, and delete A records for
 | Production | pdns-prod-fn1 | 10.100.0.153 | 8081 | app.runonflux.io |
 | Staging | pdns-staging-fn1 | 10.100.0.154 | 8081 | app2.runonflux.io |
 
-**Cert Server**: 10.100.0.172 (authorized to access both APIs)
+**10.100.0.172** (`FX-FLUX-CERT-01`) is authorised to reach both APIs. It is
+usually called "the cert server", but it runs three separate things, and the
+writes to `app`/`app2` come from the second and third — not from certificate
+work:
+
+| Service | Repo | Role |
+|---|---|---|
+| cert-orchestrator | `RunOnFlux/flux-geo-cert` | Let's Encrypt DNS-01 for `cdn-geo` / `cdn-geodev`; writes `_acme-challenge` TXT |
+| `flux-apps-dns-manager` | `RunOnFlux/flux-apps-dns-manager` | polls every ~60s, reconciles ~110 app records against where the apps actually run, and POSTs deltas to the gateway |
+| `dns-gateway` | `RunOnFlux/flux-dns-gateway` | REST layer in front of the PowerDNS API; performs the actual PATCH |
+
+So a PATCH arriving from `10.100.0.172` is almost always `flux-apps-dns-manager`,
+not the cert orchestrator. On a normal day it writes ~25 times across ~500 polls.
+Worth knowing before going looking in the wrong repository.
+
+The primary's own address is also in `webserver-allow-from`, so it can call its
+own API for the zone record reconcile in `powerdns_setup.yaml`.
 
 ## How It Works
 
